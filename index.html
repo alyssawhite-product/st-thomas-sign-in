@@ -1,0 +1,1499 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>St Thomas OPC – Queue Preview</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/qrious@4.0.2/dist/qrious.min.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: { DEFAULT: '#0b6e4f', dark: '#074d36', light: '#e2f3eb' },
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    .field-label { display:block; font-size:.875rem; font-weight:600; color:#334155; margin-bottom:.25rem }
+    .field-input { display:block; width:100%; border-radius:.5rem; border:1px solid #cbd5e1; padding:.625rem .75rem; font-size:1rem; }
+    .field-input:focus { outline:2px solid #0b6e4f; outline-offset:0; }
+    .btn-primary { display:inline-flex; align-items:center; justify-content:center; gap:.25rem; border-radius:.5rem; background:#0b6e4f; padding:.625rem 1rem; color:#fff; font-weight:600; }
+    .btn-primary:hover { background:#074d36; }
+    .btn-primary:disabled { opacity:.5; }
+    .btn-secondary { display:inline-flex; align-items:center; justify-content:center; gap:.25rem; border-radius:.5rem; background:#e2e8f0; padding:.625rem 1rem; color:#0f172a; font-weight:600; }
+    .btn-secondary:hover { background:#cbd5e1; }
+    .btn-danger { display:inline-flex; align-items:center; justify-content:center; gap:.25rem; border-radius:.5rem; background:#dc2626; padding:.625rem 1rem; color:#fff; font-weight:600; }
+    .btn-danger:hover { background:#b91c1c; }
+    [data-view] { display:none; }
+    [data-view].active { display:block; }
+    .display-bg { background:#020617; color:#fff; min-height:100vh; }
+  </style>
+</head>
+<body class="bg-slate-50 text-slate-900 pb-14">
+
+<!-- ============================== SIGN-IN ============================== -->
+<section data-view="signin" class="active">
+  <main class="mx-auto flex min-h-screen max-w-md flex-col px-6 py-10">
+    <header class="mb-8">
+      <p class="text-sm font-semibold uppercase tracking-wide text-brand">St Thomas Outpatient Clinic</p>
+      <h1 class="mt-2 text-3xl font-bold leading-tight">Check in for your visit</h1>
+      <p class="mt-3 text-slate-600">Enter your name and the type of your visit to join the queue. You can find your place again at any time using your name, ID number, or reference code.</p>
+    </header>
+
+    <form id="signin-form" class="space-y-6" novalidate>
+      <div id="si-summary" class="hidden rounded-md border-l-4 border-red-600 bg-red-50 p-4" tabindex="-1" role="alert">
+        <h2 class="text-base font-bold text-red-800">There is a problem</h2>
+        <ul class="mt-2 list-disc space-y-1 pl-5 text-sm text-red-700" id="si-summary-list"></ul>
+      </div>
+
+      <div>
+        <label for="si-name" class="field-label">Your name</label>
+        <input id="si-name" maxlength="120" class="field-input" placeholder="e.g. Karen Williams" />
+        <p id="si-name-error" class="mt-1 hidden text-sm font-medium text-red-700"></p>
+      </div>
+      <div>
+        <span class="field-label block mb-2">Identification Number</span>
+        <div class="flex gap-3 mb-3">
+          <label class="flex cursor-pointer items-center gap-2 rounded-md border px-4 py-2.5 text-sm font-medium has-[:checked]:border-brand has-[:checked]:bg-brand-light border-slate-300">
+            <input type="radio" name="si-id-type" value="national_id" checked class="h-4 w-4 accent-emerald-700" /> National ID number
+          </label>
+          <label class="flex cursor-pointer items-center gap-2 rounded-md border px-4 py-2.5 text-sm font-medium has-[:checked]:border-brand has-[:checked]:bg-brand-light border-slate-300">
+            <input type="radio" name="si-id-type" value="passport" class="h-4 w-4 accent-emerald-700" /> Passport Number
+          </label>
+        </div>
+        <input id="si-id-number" maxlength="30" class="field-input" placeholder="e.g. 1234567890" />
+        <p id="si-id-number-error" class="mt-1 hidden text-sm font-medium text-red-700"></p>
+        <p id="si-duplicate" class="mt-1 hidden text-sm font-medium text-red-700"></p>
+      </div>
+      <fieldset>
+        <legend class="field-label">Type of visit</legend>
+        <div class="mt-3 space-y-2" id="si-visit-types">
+          <!-- populated by JS -->
+        </div>
+        <p id="si-visit-type-error" class="mt-2 hidden text-sm font-medium text-red-700"></p>
+      </fieldset>
+
+      <fieldset id="si-prescription-fs" class="hidden">
+        <legend class="field-label">Do you have a prescription?</legend>
+        <div class="mt-3 space-y-2" id="si-prescription-opts"></div>
+        <p id="si-has-prescription-error" class="mt-2 hidden text-sm font-medium text-red-700"></p>
+      </fieldset>
+
+      <button type="submit" class="btn-primary w-full text-lg">Check in</button>
+
+      <div class="mt-4 text-center">
+        <button type="button" data-go="lookup" class="nav-btn block w-full text-sm font-semibold text-brand hover:underline">
+          Already checked in? Find my place in queue →
+        </button>
+      </div>
+    </form>
+
+    <footer class="mt-12 text-center text-xs text-slate-500">
+      Your name is only shown to clinic staff. The waiting-room display shows your initials only.
+    </footer>
+    <div data-powered-by="light" class="mt-8"></div>
+  </main>
+</section>
+
+<!-- ============================== PATIENT QUEUE PAGE ============================== -->
+<section data-view="queue">
+  <main class="mx-auto flex min-h-screen max-w-md flex-col px-6 py-10">
+    <header class="mb-6">
+      <p class="text-sm font-semibold uppercase tracking-wide text-brand">St Thomas Outpatient Clinic</p>
+      <h1 class="mt-2 text-2xl font-bold" id="q-greeting">Hi</h1>
+      <p class="mt-1 text-slate-600">You can return to this page at any time to check your position.</p>
+      <p class="mt-3 text-sm text-slate-500" id="q-summary"></p>
+    </header>
+
+    <div id="q-status-box"></div>
+
+    <dl class="mt-8 grid grid-cols-2 gap-4 text-sm">
+      <div>
+        <dt class="text-slate-500">Reference</dt>
+        <dd class="mt-1 font-mono text-lg font-semibold tracking-widest" id="q-ref">—</dd>
+      </div>
+      <div>
+        <dt class="text-slate-500">Visit type</dt>
+        <dd class="mt-1 font-semibold capitalize" id="q-visit-type">—</dd>
+      </div>
+    </dl>
+
+    <section class="mt-8 rounded-lg border border-slate-200 bg-slate-50 p-4">
+      <h2 class="text-sm font-bold text-slate-800">How to find your place again</h2>
+      <p class="mt-1 text-sm text-slate-600">
+        Go to <a id="q-lookup-url" class="font-semibold text-brand hover:underline" href="#">your lookup URL</a> and enter your name, ID number, or reference code.
+      </p>
+    </section>
+
+    <p class="mt-8 text-sm text-slate-600">
+      Take a seat in the waiting area. You will be called by name when it is your turn.
+      If you have any questions, speak to a member of staff at the front desk and show
+      them your reference code.
+    </p>
+    <div data-powered-by="light" class="mt-12"></div>
+  </main>
+</section>
+
+<!-- ============================== PUBLIC DISPLAY ============================== -->
+<section data-view="display">
+  <div class="display-bg relative">
+    <button id="d-unlock-audio" class="fixed inset-0 z-50 hidden flex-col items-center justify-center gap-4 bg-slate-950/90 text-white">
+      <span class="text-5xl">🔔</span>
+      <span class="text-2xl font-semibold">Tap to enable sound</span>
+      <span class="text-slate-400">Required for patient call alerts</span>
+    </button>
+    <header class="flex items-end justify-between gap-6 border-b border-slate-800 px-10 py-6">
+      <div>
+        <p class="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-400">St Thomas OPC</p>
+        <h1 class="mt-1 text-4xl font-bold">Patient Queue</h1>
+      </div>
+      <div class="text-right">
+        <p class="text-sm uppercase tracking-widest text-slate-400" id="d-date">—</p>
+        <p class="mt-1 font-mono text-4xl font-bold tabular-nums" id="d-time">—</p>
+      </div>
+    </header>
+    <div class="mx-10 mt-8 flex flex-wrap gap-4" id="d-called"></div>
+    <div class="grid grid-cols-1 gap-6 px-10 py-8 lg:grid-cols-2" id="d-columns"></div>
+    <footer class="px-10 py-6">
+      <div data-powered-by="dark"></div>
+    </footer>
+  </div>
+</section>
+
+<!-- ============================== STAFF LOGIN ============================== -->
+<section data-view="stafflogin">
+  <main class="mx-auto flex min-h-screen max-w-sm flex-col justify-center px-6 py-10">
+    <h1 class="text-2xl font-bold">Clinic sign-in</h1>
+    <p class="mt-2 text-slate-600">Sign in with your clinic email. Demo password: <code class="rounded bg-slate-100 px-1 text-sm">DemoPass1!</code></p>
+    <form id="staff-login-form" class="mt-6 space-y-4" novalidate>
+      <div>
+        <label class="field-label">Email</label>
+        <input id="sl-email" type="email" required class="field-input" placeholder="clinician@stthomas.demo" />
+      </div>
+      <div>
+        <label class="field-label">Password</label>
+        <input id="sl-password" type="password" required class="field-input" />
+      </div>
+      <div id="sl-error" role="alert" class="hidden rounded-md bg-red-50 px-4 py-3 text-red-700"></div>
+      <button type="submit" class="btn-primary w-full">Sign in</button>
+    </form>
+    <div data-powered-by="light" class="mt-10"></div>
+    <div class="mt-6 rounded-md bg-slate-100 p-3 text-xs text-slate-600">
+      <p class="font-semibold">Demo accounts:</p>
+      <ul class="mt-1 space-y-0.5">
+        <li>admin@stthomas.demo (admin)</li>
+        <li>clinician@stthomas.demo (clinician → /staff)</li>
+        <li>pharmacist@stthomas.demo (pharmacist → /pharmacy)</li>
+      </ul>
+    </div>
+  </main>
+</section>
+
+<!-- ============================== STAFF DASHBOARD ============================== -->
+<section data-view="staff">
+  <main class="mx-auto max-w-5xl px-6 py-8">
+    <header class="flex items-center justify-between gap-4">
+      <div>
+        <p class="text-sm font-semibold uppercase tracking-wide text-brand">Clinic dashboard</p>
+        <h1 class="mt-1 text-3xl font-bold">Today's queue</h1>
+        <p class="mt-1 text-sm text-slate-500" id="staff-whoami">Signed in</p>
+      </div>
+      <button id="staff-signout" class="btn-secondary">Sign out</button>
+    </header>
+
+    <div class="mt-6 grid grid-cols-3 gap-4 text-center" id="staff-stats"></div>
+
+    <div class="mt-6 flex flex-wrap gap-2">
+      <button id="staff-toggle-priority" class="btn-secondary">+ Priority insert</button>
+    </div>
+
+    <form id="staff-priority-form" class="mt-4 rounded-lg border border-red-200 bg-red-50/60 p-4 hidden" novalidate>
+      <p class="text-sm font-semibold text-red-800">Priority insert (police / prison officer / emergency)</p>
+      <p class="mt-1 text-xs text-red-700">Placed at the front of the chosen queue. Not shown on the public display.</p>
+      <div class="mt-3 grid gap-3 sm:grid-cols-2">
+        <input name="name" required placeholder="Patient name" class="field-input" />
+        <input name="id_number" placeholder="ID (optional)" class="field-input" />
+        <select name="visit_type" required class="field-input">
+          <option value="general">General</option>
+          <option value="follow-up">Follow-up</option>
+          <option value="other">Other</option>
+        </select>
+        <input name="reason" required placeholder="Reason (e.g. police escort)" class="field-input" />
+      </div>
+      <div class="mt-3 flex gap-2">
+        <button type="submit" class="btn-danger">Insert at front of queue</button>
+        <button type="button" id="staff-priority-cancel" class="btn-secondary">Cancel</button>
+      </div>
+    </form>
+
+    <div class="mt-8 border-b border-slate-200">
+      <nav class="-mb-px flex gap-6" id="staff-tabs"></nav>
+    </div>
+
+    <section class="mt-4">
+      <div id="staff-tab-content"></div>
+    </section>
+
+    <div data-powered-by="light" class="mt-12"></div>
+
+    <section class="mt-10 rounded-lg border border-red-200 bg-red-50 p-6 hidden" id="staff-reset-section">
+      <h2 class="text-lg font-semibold text-red-800">Reset today's queue</h2>
+      <p class="mt-2 text-sm text-red-900">Deletes every entry created today. Admin-only.</p>
+      <button id="staff-reset-btn" class="btn-danger mt-4">Reset day</button>
+    </section>
+  </main>
+</section>
+
+<!-- ============================== PHARMACY DASHBOARD ============================== -->
+<section data-view="pharmacy">
+  <main class="mx-auto max-w-4xl px-6 py-8">
+    <header class="mb-6 flex items-start justify-between gap-4">
+      <div>
+        <p class="text-sm font-semibold uppercase tracking-wide text-brand">St Thomas OPC</p>
+        <h1 class="mt-1 text-3xl font-bold">Pharmacy Queue</h1>
+        <p class="mt-1 text-sm text-slate-500" id="pharm-whoami">Signed in</p>
+      </div>
+      <button id="pharm-signout" class="btn-secondary">Sign out</button>
+    </header>
+
+    <div class="grid grid-cols-3 gap-4 text-center mb-6" id="pharm-stats"></div>
+
+    <div class="border-b border-slate-200">
+      <nav class="-mb-px flex flex-wrap gap-6" id="pharm-tabs"></nav>
+    </div>
+
+    <section class="mt-4">
+      <div id="pharm-tab-content"></div>
+    </section>
+
+    <div data-powered-by="light" class="mt-12"></div>
+  </main>
+</section>
+
+<!-- ============================== LOOKUP ============================== -->
+<section data-view="lookup">
+  <main class="mx-auto flex min-h-screen max-w-md flex-col px-6 py-10">
+    <header class="mb-8">
+      <p class="text-sm font-semibold uppercase tracking-wide text-brand">St Thomas Outpatient Clinic</p>
+      <h1 class="mt-2 text-3xl font-bold leading-tight">Find my place in queue</h1>
+      <p class="mt-3 text-slate-600">Enter your name, ID number, or reference code and we'll show you your place in the queue.</p>
+    </header>
+    <form id="lookup-form" class="space-y-5" novalidate>
+      <div>
+        <label class="field-label" for="lk-id-number">Your name, ID number, or reference code</label>
+        <input id="lk-id-number" maxlength="120" class="field-input" placeholder="e.g. Karen Williams, 1234567890, or X6AU" />
+        <p id="lk-error" role="alert" class="mt-1 hidden text-sm font-medium text-red-700"></p>
+      </div>
+      <button type="submit" class="btn-primary w-full text-lg">Find my place</button>
+    </form>
+    <p class="mt-6 text-center text-sm text-slate-500">
+      Not checked in yet?
+      <button type="button" data-go="signin" class="nav-btn font-semibold text-brand hover:underline">Check in here</button>
+    </p>
+    <div data-powered-by="light" class="mt-12"></div>
+  </main>
+</section>
+
+<!-- ============================== QR CODE ============================== -->
+<section data-view="qr">
+  <main class="mx-auto max-w-2xl px-6 py-10">
+    <p class="text-sm font-semibold uppercase tracking-wide text-brand">St Thomas Outpatient Clinic</p>
+    <h1 class="mt-1 text-3xl font-bold">Sign-in QR code</h1>
+    <p class="mt-2 text-slate-600">Print this page and display it at the front desk. Patients scan to sign in.</p>
+    <div class="mt-4 flex flex-wrap gap-3">
+      <button id="qr-print" class="btn-secondary">Print this page</button>
+      <button id="qr-refresh" class="btn-secondary">Refresh code</button>
+    </div>
+    <section class="mt-10 rounded-lg border border-slate-200 p-8">
+      <div class="text-center">
+        <h2 class="text-2xl font-bold">St Thomas Outpatient Clinic</h2>
+        <p class="mt-1 text-slate-700">Scan to sign in for your visit</p>
+      </div>
+      <div class="mt-8 flex justify-center">
+        <canvas id="qr-canvas" class="rounded-md border border-slate-200 bg-white"></canvas>
+      </div>
+      <p class="mt-4 break-all text-center text-xs text-slate-500" id="qr-url">—</p>
+      <ol class="mt-8 space-y-2 text-base text-slate-700">
+        <li>1. Open your phone camera and point it at the code.</li>
+        <li>2. Tap the link that appears.</li>
+        <li>3. Enter your name and the type of your visit.</li>
+        <li>4. Your queue position is on the next page.</li>
+      </ol>
+      <div class="mt-10 border-t border-slate-200 pt-4">
+        <div data-powered-by="light"></div>
+      </div>
+    </section>
+  </main>
+</section>
+
+<!-- ============================== DEMO NAV ============================== -->
+<nav class="fixed bottom-0 left-0 right-0 z-50 border-t border-slate-200 bg-white/95 backdrop-blur-sm">
+  <div class="mx-auto flex max-w-3xl items-center justify-between gap-2 px-4 py-1">
+    <span class="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Demo</span>
+    <div class="flex flex-wrap gap-1">
+      <button data-go="signin" class="nav-btn rounded-md px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100">Check in</button>
+      <button data-go="display" class="nav-btn rounded-md px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100">Display</button>
+      <button data-go="stafflogin" class="nav-btn rounded-md px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100">Clinic</button>
+      <button data-go="pharmacy" class="nav-btn rounded-md px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100">Pharmacy</button>
+      <button data-go="qr" class="nav-btn rounded-md px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100">QR code</button>
+    </div>
+  </div>
+</nav>
+
+<script>
+// ============================================================
+// State store
+// ============================================================
+const STORAGE_KEY = 'stthomas-queue-preview-v1';
+
+function poweredByHTML(variant) {
+  const captionColor = variant === 'dark' ? 'text-slate-400' : 'text-slate-500';
+  const brandColor = variant === 'dark' ? 'text-slate-100' : 'text-slate-700';
+  return `<div class="flex items-center justify-center gap-2">
+    <span class="text-xs uppercase tracking-wider ${captionColor}">Powered by</span>
+    <span class="text-sm font-bold tracking-tight ${brandColor}">GovTech Barbados</span>
+  </div>`;
+}
+
+function paintPoweredBy() {
+  document.querySelectorAll('[data-powered-by]').forEach(el => {
+    if (el.dataset.poweredByDone) return;
+    el.innerHTML = poweredByHTML(el.dataset.poweredBy || 'light');
+    el.dataset.poweredByDone = '1';
+  });
+}
+
+const VISIT_TYPES = [
+  { value: 'general', label: 'General', description: 'For consultations, referrals, or new concerns not covered by the options below.' },
+  { value: 'follow-up', label: 'Follow-up', description: 'A return visit to check on a previous condition or treatment.' },
+  { value: 'pharmacy', label: 'Pharmacy', description: 'To collect or enquire about a prescription or medication.' },
+  { value: 'other', label: 'Other', description: 'For any visit not covered by the options above.' },
+];
+const PRESCRIPTION_OPTIONS = [
+  { value: 'yes', label: 'Yes, paper prescription in hand', description: "I have the paper from my doctor today." },
+  { value: 'electronic', label: 'Electronic prescription on file', description: "My doctor sent it to the pharmacy already." },
+  { value: 'no', label: 'No prescription yet', description: "I'm here to ask about a medication or pick something up without a prescription." },
+];
+const STAFF_ACCOUNTS = [
+  { email: 'admin@stthomas.demo', password: 'DemoPass1!', role: 'admin' },
+  { email: 'clinician@stthomas.demo', password: 'DemoPass1!', role: 'clinician' },
+  { email: 'pharmacist@stthomas.demo', password: 'DemoPass1!', role: 'pharmacist' },
+];
+
+function load() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) {
+      const fresh = seed();
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(fresh));
+      return fresh;
+    }
+    return JSON.parse(raw);
+  } catch {
+    const fresh = seed();
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(fresh)); } catch {}
+    return fresh;
+  }
+}
+function save() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  broadcast();
+}
+function seed() {
+  // Pre-loaded sample data so every view immediately shows the new P0
+  // behaviour (ticket numbers, segmented streams, masked names, priority
+  // insert, transferred badge, preparing state, fulfilment notes).
+  const now = Date.now();
+  const iso = (offsetMin) => new Date(now - offsetMin * 60 * 1000).toISOString();
+  const mk = (overrides) => Object.assign({
+    id: crypto.randomUUID(),
+    token: makeToken(),
+    id_type: 'national_id',
+    position: 0,
+    status: 'waiting',
+    priority: false,
+    priority_reason: null,
+    transferred_from: null,
+    pharmacy_notes: null,
+    has_prescription: null,
+    called_at: null,
+    seen_at: null,
+  }, overrides);
+  const patientToken = makeToken();
+  return {
+    entries: [
+      // Priority insert — front of clinical, hidden from public display
+      mk({
+        name: 'Officer Brown',
+        id_number: 'PRIORITY',
+        visit_type: 'general',
+        ticket_number: 1,
+        priority: true,
+        priority_reason: 'Police escort',
+        created_at: iso(45),
+      }),
+      // Currently called on clinical
+      mk({
+        name: 'Karen Williams',
+        id_number: '1234567890',
+        visit_type: 'general',
+        ticket_number: 2,
+        status: 'called',
+        created_at: iso(40),
+        called_at: iso(1),
+      }),
+      // Waiting clinical
+      mk({
+        name: 'Marcus Cumberbatch',
+        id_number: '9876543210',
+        visit_type: 'follow-up',
+        ticket_number: 3,
+        created_at: iso(30),
+      }),
+      mk({
+        name: 'Janelle Hinds',
+        id_number: '5678901234',
+        visit_type: 'general',
+        ticket_number: 4,
+        created_at: iso(18),
+      }),
+      // Pharmacy: preparing (intermediate state)
+      mk({
+        name: 'Delores Mascoll',
+        id_number: '2233445566',
+        visit_type: 'pharmacy',
+        ticket_number: 1,
+        status: 'preparing',
+        has_prescription: 'electronic',
+        pharmacy_notes: 'Pulled — awaiting verification',
+        created_at: iso(25),
+        called_at: iso(8),
+      }),
+      // Pharmacy: waiting, transferred from doctor
+      mk({
+        name: 'Theo Greaves',
+        id_number: '3344556677',
+        visit_type: 'pharmacy',
+        ticket_number: 2,
+        transferred_from: 'general',
+        has_prescription: 'yes',
+        created_at: iso(10),
+      }),
+      // Pharmacy: waiting, no prescription
+      mk({
+        name: 'Akiela Smith',
+        id_number: '7788990011',
+        visit_type: 'pharmacy',
+        ticket_number: 3,
+        has_prescription: 'no',
+        created_at: iso(5),
+        token: patientToken,
+      }),
+    ],
+    currentToken: patientToken,  // "My queue" view defaults to this patient
+    staff: null,
+    nextTicketByStream: { clinical: 5, pharmacy: 4 },
+  };
+}
+function reset() {
+  state = seed();
+  save();
+  render();
+}
+
+let state = load();
+
+function streamFor(visitType) {
+  return visitType === 'pharmacy' ? 'pharmacy' : 'clinical';
+}
+function streamLabel(s) { return s === 'pharmacy' ? 'Pharmacy' : 'Doctor'; }
+function makeToken() {
+  const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let t = '';
+  for (let i = 0; i < 4; i++) t += alphabet[Math.floor(Math.random() * alphabet.length)];
+  return t;
+}
+function maskedName(name) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return '';
+  if (parts.length === 1) return parts[0];
+  return `${parts[0]} ${parts[parts.length-1][0].toUpperCase()}.`;
+}
+function fmtTime(iso) {
+  return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+function waitMinutes(iso) {
+  return Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60000));
+}
+
+// ============================================================
+// Mutations
+// ============================================================
+function createEntry({ name, idType, idNumber, visitType, hasPrescription }) {
+  const stream = streamFor(visitType);
+  const ticketNumber = state.nextTicketByStream[stream]++;
+  const entry = {
+    id: crypto.randomUUID(),
+    token: makeToken(),
+    name, id_type: idType, id_number: idNumber,
+    visit_type: visitType,
+    ticket_number: ticketNumber,
+    status: 'waiting',
+    priority: false,
+    priority_reason: null,
+    transferred_from: null,
+    pharmacy_notes: null,
+    has_prescription: visitType === 'pharmacy' ? (hasPrescription || null) : null,
+    created_at: new Date().toISOString(),
+    called_at: null,
+    seen_at: null,
+  };
+  state.entries.push(entry);
+  state.currentToken = entry.token;
+  save();
+  return entry;
+}
+function callEntry(id) {
+  const entry = state.entries.find(e => e.id === id);
+  if (!entry) return;
+  state.entries.forEach(e => {
+    if (e.visit_type === entry.visit_type && e.id !== id && (e.status === 'called' || e.status === 'preparing')) {
+      e.status = 'seen';
+      e.seen_at = new Date().toISOString();
+    }
+  });
+  entry.status = 'called';
+  entry.called_at = new Date().toISOString();
+  save();
+}
+function markSeen(id) {
+  const entry = state.entries.find(e => e.id === id);
+  if (!entry) return;
+  entry.status = 'seen';
+  entry.seen_at = new Date().toISOString();
+  save();
+}
+function setPreparing(id) {
+  const entry = state.entries.find(e => e.id === id);
+  if (!entry) return;
+  entry.status = 'preparing';
+  save();
+}
+function setPharmacyNote(id, note) {
+  const entry = state.entries.find(e => e.id === id);
+  if (!entry) return;
+  entry.pharmacy_notes = note.trim() || null;
+  save();
+}
+function transferEntry(id, newVisitType, hasPrescription) {
+  const entry = state.entries.find(e => e.id === id);
+  if (!entry) return;
+  const newStream = streamFor(newVisitType);
+  const ticketNumber = state.nextTicketByStream[newStream]++;
+  entry.transferred_from = entry.transferred_from || entry.visit_type;
+  entry.visit_type = newVisitType;
+  entry.ticket_number = ticketNumber;
+  entry.created_at = new Date().toISOString();
+  entry.status = 'waiting';
+  entry.called_at = null;
+  entry.seen_at = null;
+  if (newVisitType === 'pharmacy' && hasPrescription) entry.has_prescription = hasPrescription;
+  save();
+}
+function priorityInsert({ name, idNumber, visitType, reason }) {
+  const stream = streamFor(visitType);
+  const ticketNumber = state.nextTicketByStream[stream]++;
+  state.entries.push({
+    id: crypto.randomUUID(),
+    token: makeToken(),
+    name, id_type: 'national_id', id_number: idNumber || 'PRIORITY',
+    visit_type: visitType,
+    ticket_number: ticketNumber,
+    status: 'waiting',
+    priority: true,
+    priority_reason: reason,
+    transferred_from: null,
+    pharmacy_notes: null,
+    has_prescription: null,
+    created_at: new Date(Date.now() - 24 * 3600 * 1000).toISOString(), // sort to front
+    called_at: null,
+    seen_at: null,
+  });
+  save();
+}
+function resetDay() {
+  state.entries = [];
+  state.nextTicketByStream = { clinical: 1, pharmacy: 1 };
+  state.currentToken = null;
+  save();
+}
+
+// ============================================================
+// Cross-tab + cross-view sync
+// ============================================================
+const bc = ('BroadcastChannel' in window) ? new BroadcastChannel(STORAGE_KEY) : null;
+function broadcast() { if (bc) bc.postMessage('change'); }
+if (bc) bc.onmessage = () => { state = load(); render(); };
+window.addEventListener('storage', (e) => {
+  if (e.key === STORAGE_KEY) { state = load(); render(); }
+});
+
+// ============================================================
+// Routing (tab buttons)
+// ============================================================
+function go(view) {
+  document.querySelectorAll('[data-view]').forEach(s => s.classList.toggle('active', s.dataset.view === view));
+  document.querySelectorAll('.nav-btn').forEach(b => {
+    const active = b.dataset.go === view ||
+      (view === 'staff' && b.dataset.go === 'stafflogin') ||
+      (view === 'queue' && b.dataset.go === 'queue');
+    b.classList.toggle('bg-brand', active);
+    b.classList.toggle('text-white', active);
+    b.classList.toggle('text-slate-600', !active);
+  });
+  // Auto-route staff button based on auth
+  render();
+}
+document.querySelectorAll('.nav-btn').forEach(b => {
+  b.addEventListener('click', () => {
+    const target = b.dataset.go;
+    if (target === 'stafflogin') {
+      go(state.staff ? 'staff' : 'stafflogin');
+    } else if (target === 'pharmacy') {
+      if (state.staff && (state.staff.role === 'pharmacist' || state.staff.role === 'admin')) {
+        go('pharmacy');
+      } else {
+        go('stafflogin');
+      }
+    } else {
+      go(target);
+    }
+  });
+});
+// Reset-demo button removed to match the localhost nav. Visitors can
+// clear their local state by clearing site data in their browser.
+
+// ============================================================
+// Sign-in form
+// ============================================================
+function renderSigninForm() {
+  const wrap = document.getElementById('si-visit-types');
+  // First radio gets a stable id so the summary anchor can focus it.
+  wrap.innerHTML = VISIT_TYPES.map((v, i) => `
+    <label class="flex cursor-pointer items-start gap-3 rounded-md border border-slate-300 px-4 py-3 text-base has-[:checked]:border-brand has-[:checked]:bg-brand-light">
+      <input ${i === 0 ? 'id="visit-type-general"' : ''} type="radio" name="si-visit-type" value="${v.value}" class="mt-0.5 h-5 w-5 shrink-0 accent-emerald-700" />
+      <span class="flex flex-col">
+        <span class="font-medium">${v.label}</span>
+        <span class="text-sm text-slate-500">${v.description}</span>
+      </span>
+    </label>
+  `).join('');
+  wrap.querySelectorAll('input').forEach(r => {
+    r.addEventListener('change', () => {
+      updatePrescriptionVisibility();
+      siClearFieldError('visit-type');
+    });
+  });
+
+  const opts = document.getElementById('si-prescription-opts');
+  opts.innerHTML = PRESCRIPTION_OPTIONS.map((o, i) => `
+    <label class="flex cursor-pointer items-start gap-3 rounded-md border border-slate-300 px-4 py-3 text-base has-[:checked]:border-brand has-[:checked]:bg-brand-light">
+      <input ${i === 0 ? 'id="has-prescription-yes"' : ''} type="radio" name="si-rx" value="${o.value}" class="mt-0.5 h-5 w-5 shrink-0 accent-emerald-700" />
+      <span class="flex flex-col"><span class="font-medium">${o.label}</span><span class="text-sm text-slate-500">${o.description}</span></span>
+    </label>
+  `).join('');
+  opts.querySelectorAll('input').forEach(r => {
+    r.addEventListener('change', () => siClearFieldError('has-prescription'));
+  });
+
+  // ID-type radios drive the placeholder of the ID input.
+  document.querySelectorAll('input[name="si-id-type"]').forEach(r => {
+    r.addEventListener('change', () => {
+      const sel = document.querySelector('input[name="si-id-type"]:checked').value;
+      document.getElementById('si-id-number').placeholder =
+        sel === 'national_id' ? 'e.g. 1234567890' : 'e.g. A1234567';
+    });
+  });
+}
+function updatePrescriptionVisibility() {
+  const picked = document.querySelector('input[name="si-visit-type"]:checked');
+  const show = picked && picked.value === 'pharmacy';
+  document.getElementById('si-prescription-fs').classList.toggle('hidden', !show);
+}
+// --- Sign-in: full-form validation with summary, inline errors, reactive clear -----
+const SI_FIELDS = ['name', 'id-number', 'visit-type', 'has-prescription'];
+const SI_FIELD_META = {
+  'name': { input: 'si-name', label: 'Your name', emptyMsg: 'Enter a name that is at least 2 characters.' },
+  'id-number': { input: 'si-id-number', label: 'Identification number', emptyMsg: 'Enter your ID number.' },
+  'visit-type': { input: 'visit-type-general', label: 'Type of visit', emptyMsg: 'Choose a type of visit.' },
+  'has-prescription': { input: 'has-prescription-yes', label: 'Prescription', emptyMsg: 'Tell us about your prescription.' },
+};
+
+function siFindDuplicate(idNumber) {
+  return state.entries.find(e =>
+    e.id_number === idNumber && e.status !== 'seen'
+  );
+}
+
+function siShowFieldError(field, msg) {
+  const el = document.getElementById(`si-${field}-error`);
+  if (!el) return;
+  el.textContent = msg;
+  el.classList.remove('hidden');
+  // Highlight the input/fieldset border too
+  const input = document.getElementById(SI_FIELD_META[field].input);
+  if (input && input.tagName === 'INPUT' && input.type !== 'radio') input.classList.add('border-red-500');
+}
+
+function siClearFieldError(field) {
+  const el = document.getElementById(`si-${field}-error`);
+  if (el) {
+    el.textContent = '';
+    el.classList.add('hidden');
+  }
+  const input = document.getElementById(SI_FIELD_META[field].input);
+  if (input && input.tagName === 'INPUT' && input.type !== 'radio') input.classList.remove('border-red-500');
+  siRefreshSummary();
+}
+
+function siClearAllErrors() {
+  SI_FIELDS.forEach(siClearFieldError);
+  document.getElementById('si-duplicate').classList.add('hidden');
+  document.getElementById('si-id-number').classList.remove('border-red-500');
+  siRefreshSummary();
+}
+
+function siRefreshSummary() {
+  const summary = document.getElementById('si-summary');
+  const list = document.getElementById('si-summary-list');
+  const errors = [];
+  SI_FIELDS.forEach(f => {
+    const el = document.getElementById(`si-${f}-error`);
+    if (el && !el.classList.contains('hidden') && el.textContent) {
+      errors.push({ field: f, msg: el.textContent });
+    }
+  });
+  const dup = document.getElementById('si-duplicate');
+  const dupVisible = !dup.classList.contains('hidden');
+  if (errors.length === 0 && !dupVisible) {
+    summary.classList.add('hidden');
+    list.innerHTML = '';
+    return;
+  }
+  summary.classList.remove('hidden');
+  list.innerHTML = errors.map(e =>
+    `<li><button type="button" data-si-jump="${e.field}" class="font-medium text-red-700 underline hover:text-red-900">${escapeHtml(e.msg)}</button></li>`
+  ).join('') + (dupVisible ? `<li>${dup.innerHTML}</li>` : '');
+  list.querySelectorAll('[data-si-jump]').forEach(b => {
+    b.addEventListener('click', () => {
+      const field = b.dataset.siJump;
+      const id = SI_FIELD_META[field].input;
+      const el = document.getElementById(id);
+      if (el) { el.focus(); el.scrollIntoView({ behavior: 'smooth', block: 'center' }); }
+    });
+  });
+}
+
+document.getElementById('signin-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  siClearAllErrors();
+
+  const name = document.getElementById('si-name').value;
+  const idType = document.querySelector('input[name="si-id-type"]:checked').value;
+  const idNumber = document.getElementById('si-id-number').value.trim();
+  const visitTypeEl = document.querySelector('input[name="si-visit-type"]:checked');
+  const visitType = visitTypeEl ? visitTypeEl.value : '';
+  const rxEl = document.querySelector('input[name="si-rx"]:checked');
+  const rx = rxEl ? rxEl.value : '';
+
+  let hasError = false;
+  if (name.trim().length < 2) {
+    siShowFieldError('name', 'Enter a name that is at least 2 characters.');
+    hasError = true;
+  }
+  if (!idNumber) {
+    siShowFieldError('id-number', 'Enter your ID number.');
+    hasError = true;
+  }
+  if (!visitType) {
+    siShowFieldError('visit-type', 'Choose a type of visit.');
+    hasError = true;
+  }
+  if (visitType === 'pharmacy' && !rx) {
+    siShowFieldError('has-prescription', 'Tell us about your prescription.');
+    hasError = true;
+  }
+
+  if (hasError) {
+    siRefreshSummary();
+    setTimeout(() => document.getElementById('si-summary').focus(), 0);
+    return;
+  }
+
+  // Duplicate-ID guard.
+  if (siFindDuplicate(idNumber)) {
+    const dup = document.getElementById('si-duplicate');
+    dup.innerHTML = `This ID number is already checked in today. <button type="button" data-si-lookup-prefill="${escapeHtml(idNumber)}" class="font-semibold underline hover:text-red-900">Find your place in the queue</button> below.`;
+    dup.classList.remove('hidden');
+    document.getElementById('si-id-number').classList.add('border-red-500');
+    siRefreshSummary();
+    setTimeout(() => document.getElementById('si-summary').focus(), 0);
+    return;
+  }
+
+  createEntry({ name: name.trim(), idType, idNumber, visitType, hasPrescription: rx || null });
+  document.getElementById('signin-form').reset();
+  // Reset state from radio defaults
+  document.querySelector('input[name="si-id-type"][value="national_id"]').checked = true;
+  document.getElementById('si-prescription-fs').classList.add('hidden');
+  document.querySelector('#si-id-number').placeholder = 'e.g. 1234567890';
+  go('queue');
+});
+
+// Delegated handler for the "Find your place in the queue" button that
+// appears inside the duplicate-ID inline error AND inside the summary
+// box (which copies that HTML on every refresh). Works no matter where
+// the user clicks.
+document.addEventListener('click', (ev) => {
+  const target = ev.target;
+  if (target instanceof HTMLElement) {
+    const btn = target.closest('[data-si-lookup-prefill]');
+    if (btn) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      const lk = document.getElementById('lk-id-number');
+      if (lk) lk.value = btn.dataset.siLookupPrefill;
+      go('lookup');
+    }
+  }
+});
+
+// Reactive clear: as soon as the user changes a field, its inline error
+// disappears. Summary box recalculates.
+document.getElementById('si-name').addEventListener('input', () => siClearFieldError('name'));
+document.getElementById('si-id-number').addEventListener('input', () => {
+  siClearFieldError('id-number');
+  document.getElementById('si-duplicate').classList.add('hidden');
+  document.getElementById('si-id-number').classList.remove('border-red-500');
+  siRefreshSummary();
+});
+
+// ============================================================
+// Patient queue page
+// ============================================================
+function currentEntry() {
+  if (!state.currentToken) return null;
+  return state.entries.find(e => e.token === state.currentToken) || null;
+}
+function renderQueue() {
+  const entry = currentEntry();
+  const greet = document.getElementById('q-greeting');
+  const box = document.getElementById('q-status-box');
+  const ref = document.getElementById('q-ref');
+  const visit = document.getElementById('q-visit-type');
+  const summary = document.getElementById('q-summary');
+  const lookupAnchor = document.getElementById('q-lookup-url');
+
+  // Always update the lookup URL to point at the deployed origin.
+  if (lookupAnchor) {
+    const base = (location.origin && location.origin !== 'null') ? location.origin + location.pathname : '';
+    const display = base.replace(/^https?:\/\//, '').replace(/\/?(preview\.html)?$/, '') + '/lookup';
+    lookupAnchor.textContent = display;
+    lookupAnchor.href = '#';
+    lookupAnchor.onclick = (ev) => { ev.preventDefault(); go('lookup'); };
+  }
+
+  if (!entry) {
+    greet.textContent = 'No active queue entry';
+    box.innerHTML = `<section class="rounded-xl bg-slate-50 p-8 text-center"><p class="text-slate-600">Check in first to see your queue position.</p></section>`;
+    ref.textContent = '—';
+    visit.textContent = '—';
+    if (summary) summary.textContent = '';
+    return;
+  }
+
+  greet.textContent = `Hi, ${entry.name.split(' ')[0]}`;
+  ref.textContent = entry.token;
+  visit.textContent = entry.visit_type;
+
+  // Subtle "Checked in as: ... · National ID: ending …XYZ" summary
+  if (summary) {
+    const idType = entry.id_type === 'passport' ? 'Passport' : 'National ID';
+    const idTail = (entry.id_number ?? '').toString().slice(-3);
+    summary.innerHTML = `Checked in as: <span class="font-medium text-slate-700">${escapeHtml(entry.name)}</span> · ${idType}: ending <span class="font-mono">…${escapeHtml(idTail)}</span>`;
+  }
+
+  const stream = streamFor(entry.visit_type);
+  const where = stream === 'pharmacy' ? 'the pharmacy window' : 'the desk';
+
+  if (entry.status === 'called' || entry.status === 'preparing') {
+    const label = entry.status === 'preparing' ? 'Pharmacist is preparing your order' : "You're being called";
+    box.innerHTML = `
+      <section class="rounded-xl bg-amber-100 p-8 text-center ring-4 ring-amber-400">
+        <p class="text-sm font-semibold uppercase tracking-wide text-amber-700">${label}</p>
+        <h2 class="mt-3 text-3xl font-bold text-amber-900">Please go to ${where}</h2>
+      </section>`;
+  } else if (entry.status === 'seen') {
+    box.innerHTML = `
+      <section class="rounded-xl bg-brand-light p-8 text-center">
+        <h2 class="text-2xl font-bold text-brand-dark">You have been seen</h2>
+        <p class="mt-3 text-slate-700">Thank you for visiting St Thomas OPC.</p>
+      </section>`;
+  } else {
+    const ahead = state.entries.filter(e =>
+      e.status === 'waiting' && streamFor(e.visit_type) === stream &&
+      (e.priority || new Date(e.created_at).getTime() < new Date(entry.created_at).getTime())
+      && e.id !== entry.id
+      && !(entry.priority && !e.priority)
+    ).length;
+    const position = ahead + 1;
+    const wait = ahead * 8;
+    box.innerHTML = `
+      <section class="rounded-xl bg-brand-light p-8 text-center">
+        <p class="text-sm font-semibold uppercase tracking-wide text-brand">Your queue position</p>
+        <p class="mt-2 text-7xl font-bold text-brand-dark">${position}</p>
+        <p class="mt-3 text-slate-700">${ahead === 0 ? "You're next." : `${ahead} ${ahead === 1 ? 'person' : 'people'} ahead of you`}</p>
+        ${ahead > 0 ? `<p class="mt-1 text-sm text-slate-500">Estimated wait: about ${wait} minute${wait === 1 ? '' : 's'}</p>` : ''}
+      </section>`;
+  }
+}
+
+// ============================================================
+// Display
+// ============================================================
+function updateDisplayClock() {
+  const now = new Date();
+  const dateEl = document.getElementById('d-date');
+  const timeEl = document.getElementById('d-time');
+  if (!dateEl || !timeEl) return;
+  dateEl.textContent = now.toLocaleDateString(undefined, {
+    weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+  });
+  timeEl.textContent = now.toLocaleTimeString(undefined, {
+    hour: '2-digit', minute: '2-digit', hour12: false,
+  });
+}
+// 24-hour HH:MM only -- a 30 s tick is plenty since the minute display
+// only changes every 60 s.
+setInterval(updateDisplayClock, 30_000);
+
+let displayAudioCtx = null;
+let displayAudioUnlocked = false;
+let displayVisibleCalledIds = new Set();
+
+function playChime() {
+  if (!displayAudioCtx) return;
+  const ctx = displayAudioCtx;
+  const notes = [523.25, 659.25, 783.99]; // C5 E5 G5
+  notes.forEach((freq, i) => {
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.type = 'sine';
+    osc.frequency.value = freq;
+    const start = ctx.currentTime + i * 0.18;
+    gain.gain.setValueAtTime(0, start);
+    gain.gain.linearRampToValueAtTime(0.35, start + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.001, start + 0.6);
+    osc.start(start);
+    osc.stop(start + 0.65);
+  });
+}
+
+function getFemaleVoice() {
+  if (!('speechSynthesis' in window)) return null;
+  const voices = window.speechSynthesis.getVoices();
+  return voices.find(v => /female|zira|samantha|google uk english female/i.test(v.name)) ?? null;
+}
+
+function announcePatient(entry) {
+  if (!('speechSynthesis' in window)) return;
+  const voice = getFemaleVoice();
+  if (!voice) return;
+  const stream = streamFor(entry.visit_type);
+  const where = stream === 'pharmacy' ? 'the pharmacy window' : 'the front desk';
+  const ticket = entry.ticket_number ?? 0;
+  // Audio uses the full name. On-screen display still uses the masked
+  // form for privacy in the open waiting area.
+  const msg = new SpeechSynthesisUtterance(`Number ${ticket}, ${entry.name}. Please go to ${where}.`);
+  msg.voice = voice;
+  window.speechSynthesis.speak(msg);
+}
+
+function unlockDisplayAudio() {
+  try {
+    displayAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const buf = displayAudioCtx.createBuffer(1, 1, 22050);
+    const src = displayAudioCtx.createBufferSource();
+    src.buffer = buf;
+    src.connect(displayAudioCtx.destination);
+    src.start();
+    if ('speechSynthesis' in window) window.speechSynthesis.getVoices();
+    displayAudioUnlocked = true;
+    const overlay = document.getElementById('d-unlock-audio');
+    if (overlay) overlay.classList.add('hidden');
+  } catch (e) {
+    // Audio not available -- the rest of the display still works.
+  }
+}
+const unlockBtn = document.getElementById('d-unlock-audio');
+if (unlockBtn) unlockBtn.addEventListener('click', unlockDisplayAudio);
+
+function renderDisplay() {
+  // Show the audio-unlock overlay the first time the user lands on /display.
+  const displayActive = document.querySelector('section[data-view="display"].active');
+  const overlay = document.getElementById('d-unlock-audio');
+  if (overlay) {
+    if (displayActive && !displayAudioUnlocked) {
+      overlay.classList.remove('hidden');
+      overlay.classList.add('flex');
+    } else {
+      overlay.classList.add('hidden');
+      overlay.classList.remove('flex');
+    }
+  }
+
+  const called = state.entries
+    .filter(e => (e.status === 'called' || e.status === 'preparing') && !e.priority)
+    .sort((a, b) => new Date(b.called_at || 0) - new Date(a.called_at || 0))
+    .slice(0, 3);
+
+  // Detect newly-called patients (in this render that weren't visible last time)
+  const currentIds = new Set(called.map(e => e.id));
+  const newlyCalled = called.filter(e => !displayVisibleCalledIds.has(e.id));
+  if (newlyCalled.length > 0 && displayAudioUnlocked) {
+    playChime();
+    // Call the name twice with a gap, so a patient who missed the
+    // first announcement still hears the second.
+    setTimeout(() => newlyCalled.forEach(announcePatient), 1100);
+    setTimeout(() => newlyCalled.forEach(announcePatient), 5500);
+  }
+  displayVisibleCalledIds = currentIds;
+  document.getElementById('d-called').innerHTML = called.map(e => {
+    const stream = streamFor(e.visit_type);
+    const where = stream === 'pharmacy' ? 'Please go to the pharmacy window' : 'Please go to the front desk';
+    return `
+      <div class="flex-1 min-w-56 rounded-lg bg-amber-400 px-6 py-5 text-slate-950">
+        <p class="text-sm font-bold uppercase tracking-widest">Now calling — ${streamLabel(stream)}</p>
+        <div class="mt-1 text-6xl font-black">#${e.ticket_number ?? '—'}</div>
+        <div class="mt-1 text-2xl font-bold">${maskedName(e.name)}</div>
+        <div class="mt-0.5 text-sm">${where}</div>
+      </div>`;
+  }).join('');
+
+  // Two stream columns. Priority entries hidden.
+  const streams = ['clinical', 'pharmacy'];
+  document.getElementById('d-columns').innerHTML = streams.map(s => {
+    const waiting = state.entries
+      .filter(e => e.status === 'waiting' && streamFor(e.visit_type) === s && !e.priority)
+      .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+    return `
+      <section>
+        <h2 class="mb-3 rounded-md bg-slate-800 px-4 py-2 text-center text-2xl font-semibold tracking-wide text-slate-100">
+          ${streamLabel(s)}<span class="ml-2 text-base font-normal text-slate-400">(${waiting.length})</span>
+        </h2>
+        ${waiting.length === 0
+          ? `<p class="rounded-lg bg-slate-900 px-4 py-6 text-center text-slate-600">No patients</p>`
+          : `<ol class="space-y-2">${waiting.map(e => `
+              <li class="flex items-center gap-4 rounded-lg bg-slate-900 px-4 py-3">
+                <span class="text-3xl font-black text-emerald-400">#${e.ticket_number ?? '—'}</span>
+                <span class="text-xs text-slate-500">${waitMinutes(e.created_at)} min waiting</span>
+              </li>`).join('')}</ol>`}
+      </section>`;
+  }).join('');
+}
+
+// ============================================================
+// Staff login
+// ============================================================
+document.getElementById('staff-login-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const email = document.getElementById('sl-email').value.trim();
+  const password = document.getElementById('sl-password').value;
+  const acc = STAFF_ACCOUNTS.find(a => a.email === email && a.password === password);
+  const err = document.getElementById('sl-error');
+  if (!acc) { err.textContent = 'Email or password is incorrect.'; err.classList.remove('hidden'); return; }
+  state.staff = { email: acc.email, role: acc.role };
+  save();
+  document.getElementById('staff-login-form').reset();
+  err.classList.add('hidden');
+  go(acc.role === 'pharmacist' ? 'pharmacy' : 'staff');
+});
+
+// ============================================================
+// Staff dashboard
+// ============================================================
+let staffActiveTab = 'waiting'; // 'waiting' | 'called' | 'seen'
+
+function renderStaff() {
+  if (!state.staff || state.staff.role === 'pharmacist') return;
+  document.getElementById('staff-whoami').textContent = `Signed in as ${state.staff.email} (${state.staff.role})`;
+  // Clinic dashboard is scoped to the clinical stream only. Pharmacy
+  // entries are handled exclusively on /pharmacy.
+  const clinicalEntries = state.entries.filter(e => streamFor(e.visit_type) !== 'pharmacy');
+  const stats = {
+    waiting: clinicalEntries.filter(e => e.status === 'waiting').length,
+    called: clinicalEntries.filter(e => e.status === 'called' || e.status === 'preparing').length,
+    seen: clinicalEntries.filter(e => e.status === 'seen').length,
+  };
+  document.getElementById('staff-stats').innerHTML = `
+    ${statCard('Waiting', stats.waiting)}
+    ${statCard('Called', stats.called)}
+    ${statCard('Seen', stats.seen)}
+  `;
+
+  const tabs = [
+    { id: 'waiting', label: `Waiting (${stats.waiting})` },
+    { id: 'called', label: `Called (${stats.called})` },
+    { id: 'seen', label: `Seen (${stats.seen})` },
+  ];
+  document.getElementById('staff-tabs').innerHTML = tabs.map(t => {
+    const active = staffActiveTab === t.id;
+    return `<button type="button" data-staff-tab="${t.id}" class="-mb-px border-b-2 px-1 pb-3 text-sm font-semibold ${
+      active ? 'border-brand text-brand' : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700'
+    }">${t.label}</button>`;
+  }).join('');
+  document.querySelectorAll('[data-staff-tab]').forEach(b => {
+    b.addEventListener('click', () => { staffActiveTab = b.dataset.staffTab; renderStaff(); });
+  });
+
+  const byTab = {
+    waiting: clinicalEntries.filter(e => e.status === 'waiting').sort(sortQueueOrder),
+    called: clinicalEntries.filter(e => e.status === 'called' || e.status === 'preparing').sort(sortQueueOrder),
+    seen: clinicalEntries.filter(e => e.status === 'seen').sort((a,b) => new Date(b.seen_at||0) - new Date(a.seen_at||0)),
+  };
+  const list = byTab[staffActiveTab];
+  const content = document.getElementById('staff-tab-content');
+  if (list.length === 0) {
+    content.innerHTML = `<p class="rounded-lg bg-slate-50 p-6 text-center text-slate-500">No patients ${staffActiveTab === 'seen' ? 'seen yet today' : `in the ${staffActiveTab} list`}.</p>`;
+  } else if (staffActiveTab === 'seen') {
+    content.innerHTML = `<ul class="divide-y divide-slate-200 rounded-lg border border-slate-200 text-sm text-slate-600">${list.map(e => `
+      <li class="flex items-center justify-between p-3">
+        <span><span class="font-mono text-slate-400">#${e.ticket_number ?? '—'}</span> ${escapeHtml(e.name)}</span>
+        <span class="text-slate-400">${e.seen_at ? fmtTime(e.seen_at) : ''}</span>
+      </li>`).join('')}</ul>`;
+  } else {
+    content.innerHTML = `<ul class="divide-y divide-slate-200 rounded-lg border border-slate-200">${list.map(staffRow).join('')}</ul>`;
+    wireStaffRowButtons();
+  }
+
+  document.getElementById('staff-reset-section').classList.toggle('hidden', state.staff.role !== 'admin');
+}
+function sortQueueOrder(a, b) {
+  if (a.priority !== b.priority) return a.priority ? -1 : 1;
+  return new Date(a.created_at) - new Date(b.created_at);
+}
+function statCard(label, value) {
+  return `<div class="rounded-lg bg-slate-50 p-4"><div class="text-3xl font-bold">${value}</div><div class="text-sm text-slate-600">${label}</div></div>`;
+}
+function staffRow(e) {
+  const stream = streamFor(e.visit_type);
+  const wasCalled = e.status === 'called' || e.status === 'preparing';
+  const statusBadge = {
+    waiting: 'bg-slate-100 text-slate-700',
+    called: 'bg-amber-100 text-amber-800',
+    preparing: 'bg-blue-100 text-blue-800',
+    seen: 'bg-emerald-100 text-emerald-800',
+  }[e.status];
+  // C6: single action button per row. C9: Move to is "Move to pharmacy"
+  // and only appears for non-pharmacy patients after they've been called.
+  const actions = !wasCalled
+    ? `<button data-act="call" data-id="${e.id}" class="btn-primary">Call</button>`
+    : `<button data-act="seen" data-id="${e.id}" class="btn-primary">Mark seen</button>${
+        stream !== 'pharmacy'
+          ? `<button data-act="movepharm" data-id="${e.id}" class="btn-secondary">Move to pharmacy</button>`
+          : ''
+      }`;
+  return `
+    <li class="grid grid-cols-1 gap-3 p-4 sm:grid-cols-[3.5rem_1fr_auto] sm:items-center ${e.priority ? 'border-l-4 border-red-500 bg-red-50/40' : ''}">
+      <div class="flex flex-col items-start">
+        <span class="text-2xl font-bold text-emerald-700">${e.ticket_number ?? '—'}</span>
+        <span class="text-[10px] font-semibold uppercase tracking-wider text-slate-500">${streamLabel(stream)}</span>
+      </div>
+      <div>
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="text-lg font-semibold">${escapeHtml(e.name)}</span>
+          <span class="rounded-full px-2 py-0.5 text-xs font-semibold uppercase ${statusBadge}">${e.status}</span>
+          ${e.priority ? `<span class="rounded-full bg-red-600 px-2 py-0.5 text-xs font-bold uppercase text-white">Priority</span>` : ''}
+          ${e.transferred_from ? `<span class="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-medium text-slate-700">← ${e.transferred_from}</span>` : ''}
+        </div>
+        <p class="mt-1 text-sm text-slate-500">
+          ${e.visit_type} · ${e.id_type === 'passport' ? 'Passport' : 'National ID'}: ${escapeHtml(e.id_number)} · Ref: <span class="font-mono tracking-widest">${e.token}</span>
+        </p>
+        ${e.priority && e.priority_reason ? `<p class="mt-1 text-xs text-red-700">Priority reason: ${escapeHtml(e.priority_reason)}</p>` : ''}
+      </div>
+      <div class="flex flex-wrap gap-2 sm:justify-end">${actions}</div>
+    </li>`;
+}
+function wireStaffRowButtons() {
+  document.querySelectorAll('#staff-tab-content [data-act]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.id;
+      const act = btn.dataset.act;
+      if (act === 'call') callEntry(id);
+      else if (act === 'seen') markSeen(id);
+      else if (act === 'movepharm') transferEntry(id, 'pharmacy');
+    });
+  });
+}
+document.getElementById('staff-signout').addEventListener('click', () => {
+  state.staff = null; save(); go('stafflogin');
+});
+document.getElementById('staff-toggle-priority').addEventListener('click', () => {
+  document.getElementById('staff-priority-form').classList.toggle('hidden');
+});
+document.getElementById('staff-priority-cancel').addEventListener('click', () => {
+  document.getElementById('staff-priority-form').classList.add('hidden');
+});
+document.getElementById('staff-priority-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  priorityInsert({
+    name: fd.get('name').toString().trim(),
+    idNumber: fd.get('id_number').toString().trim(),
+    visitType: fd.get('visit_type').toString(),
+    reason: fd.get('reason').toString().trim(),
+  });
+  e.target.reset();
+  e.target.classList.add('hidden');
+});
+document.getElementById('staff-reset-btn').addEventListener('click', () => {
+  if (confirm("Delete every entry created today?")) resetDay();
+});
+
+// ============================================================
+// Pharmacy dashboard
+// ============================================================
+let pharmActiveTab = 'waiting'; // 'waiting' | 'called' | 'preparing' | 'served'
+
+function renderPharmacy() {
+  if (!state.staff || (state.staff.role !== 'pharmacist' && state.staff.role !== 'admin')) return;
+  document.getElementById('pharm-whoami').textContent = `Signed in as ${state.staff.email} (${state.staff.role})`;
+  const list = state.entries.filter(e => e.visit_type === 'pharmacy').sort(sortQueueOrder);
+  const stats = {
+    waiting: list.filter(e => e.status === 'waiting').length,
+    called: list.filter(e => e.status === 'called' || e.status === 'preparing').length,
+    served: list.filter(e => e.status === 'seen').length,
+  };
+  document.getElementById('pharm-stats').innerHTML = `
+    ${statCard('Waiting', stats.waiting)}
+    ${statCard('Called', stats.called)}
+    ${statCard('Served', stats.served)}
+  `;
+
+  const byTab = {
+    waiting: list.filter(e => e.status === 'waiting'),
+    called: list.filter(e => e.status === 'called'),
+    preparing: list.filter(e => e.status === 'preparing'),
+    served: list.filter(e => e.status === 'seen')
+      .sort((a, b) => new Date(b.seen_at || 0) - new Date(a.seen_at || 0)),
+  };
+  const tabs = [
+    { id: 'waiting', label: `Waiting (${byTab.waiting.length})` },
+    { id: 'called', label: `Called (${byTab.called.length})` },
+    { id: 'preparing', label: `Being Prepared (${byTab.preparing.length})` },
+    { id: 'served', label: `Served (${byTab.served.length})` },
+  ];
+  document.getElementById('pharm-tabs').innerHTML = tabs.map(t => {
+    const active = pharmActiveTab === t.id;
+    return `<button type="button" data-pharm-tab="${t.id}" class="-mb-px border-b-2 px-1 pb-3 text-sm font-semibold ${
+      active ? 'border-brand text-brand' : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700'
+    }">${t.label}</button>`;
+  }).join('');
+  document.querySelectorAll('[data-pharm-tab]').forEach(b => {
+    b.addEventListener('click', () => { pharmActiveTab = b.dataset.pharmTab; renderPharmacy(); });
+  });
+
+  const content = document.getElementById('pharm-tab-content');
+  const rows = byTab[pharmActiveTab];
+  if (rows.length === 0) {
+    content.innerHTML = `<p class="rounded-lg bg-slate-50 p-6 text-center text-slate-500">No patients in the ${pharmActiveTab === 'preparing' ? 'being prepared' : pharmActiveTab} list.</p>`;
+  } else if (pharmActiveTab === 'served') {
+    content.innerHTML = `<ul class="divide-y divide-slate-200 rounded-lg border border-slate-200 text-sm text-slate-600">${rows.map(e => `
+      <li class="flex items-center justify-between p-3">
+        <div><span class="font-mono text-slate-400">#${e.ticket_number ?? '—'}</span> <span class="font-medium">${escapeHtml(e.name)}</span></div>
+        <span class="text-slate-400">${e.seen_at ? fmtTime(e.seen_at) : ''}</span>
+      </li>`).join('')}</ul>`;
+  } else {
+    content.innerHTML = `<ul class="space-y-3">${rows.map(pharmRow).join('')}</ul>`;
+    wirePharmRowButtons();
+  }
+}
+function rxLabel(v) {
+  if (v === 'yes') return 'Paper in hand';
+  if (v === 'electronic') return 'Electronic on file';
+  if (v === 'no') return 'No prescription';
+  return 'Not specified';
+}
+function pharmRow(e) {
+  const statusBadge = {
+    waiting: 'bg-slate-100 text-slate-700',
+    called: 'bg-amber-100 text-amber-800',
+    preparing: 'bg-blue-100 text-blue-800',
+    seen: 'bg-emerald-100 text-emerald-800',
+  }[e.status];
+  // C6 single-action progression: Call → Mark preparing → Mark served.
+  // C12: no Move to button at all on the pharmacy dashboard.
+  const action = e.status === 'waiting'
+    ? `<button data-pact="call" data-id="${e.id}" class="btn-primary">Call</button>`
+    : e.status === 'called'
+    ? `<button data-pact="prep" data-id="${e.id}" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white">Mark preparing</button>`
+    : `<button data-pact="seen" data-id="${e.id}" class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white">Mark served</button>`;
+  // Notes editor only after interaction starts (called/preparing).
+  const notesBlock = e.status === 'waiting' ? '' : `
+      <div class="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3">
+        <label class="block text-xs font-semibold uppercase tracking-wider text-slate-500">Fulfilment notes</label>
+        <textarea data-note-id="${e.id}" rows="2" placeholder="e.g. Pulled — awaiting verification" class="mt-1 w-full rounded-md border border-slate-300 px-2 py-1 text-sm">${escapeHtml(e.pharmacy_notes ?? '')}</textarea>
+        <div class="mt-2 flex items-center gap-2">
+          <button data-save-note="${e.id}" class="rounded-md bg-slate-700 px-3 py-1 text-xs font-semibold text-white">Save note</button>
+        </div>
+      </div>`;
+  return `
+    <li class="rounded-lg border p-4 ${e.priority ? 'border-red-300 bg-red-50/40' : 'border-slate-200 bg-white'}">
+      <div class="flex flex-wrap items-center gap-3">
+        <span class="text-2xl font-bold text-emerald-700">#${e.ticket_number ?? '—'}</span>
+        <span class="text-lg font-semibold">${escapeHtml(e.name)}</span>
+        <span class="rounded-full px-2 py-0.5 text-xs font-semibold uppercase ${statusBadge}">${e.status}</span>
+        ${e.priority ? `<span class="rounded-full bg-red-600 px-2 py-0.5 text-xs font-bold uppercase text-white">Priority</span>` : ''}
+        ${e.transferred_from ? `<span class="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-medium text-slate-700">← ${e.transferred_from}</span>` : ''}
+      </div>
+      <p class="mt-1 text-sm text-slate-500">${e.id_type === 'passport' ? 'Passport' : 'National ID'}: <span class="font-medium text-slate-700">${escapeHtml(e.id_number)}</span> · Ref: <span class="font-mono tracking-widest">${e.token}</span> · Arrived ${fmtTime(e.created_at)} · ${waitMinutes(e.created_at)} min waiting</p>
+      <p class="mt-1 text-sm"><span class="text-slate-500">Prescription:</span> <span class="font-medium">${rxLabel(e.has_prescription)}</span></p>
+      ${notesBlock}
+      <div class="mt-3 flex flex-wrap gap-2">${action}</div>
+    </li>`;
+}
+function wirePharmRowButtons() {
+  document.querySelectorAll('#pharm-tab-content [data-pact]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.id;
+      const act = btn.dataset.pact;
+      if (act === 'call') callEntry(id);
+      else if (act === 'prep') setPreparing(id);
+      else if (act === 'seen') markSeen(id);
+    });
+  });
+  document.querySelectorAll('#pharm-tab-content [data-save-note]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.saveNote;
+      const note = document.querySelector(`[data-note-id="${id}"]`).value;
+      setPharmacyNote(id, note);
+      btn.textContent = 'Saved.';
+      setTimeout(() => { btn.textContent = 'Save note'; }, 1200);
+    });
+  });
+}
+document.getElementById('pharm-signout').addEventListener('click', () => {
+  state.staff = null; save(); go('stafflogin');
+});
+
+// ============================================================
+// Lookup (find queue position by ID number)
+// ============================================================
+document.getElementById('lookup-form').addEventListener('submit', (e) => {
+  e.preventDefault();
+  const input = document.getElementById('lk-id-number');
+  const raw = input.value;
+  const trimmed = raw.trim();
+  const err = document.getElementById('lk-error');
+  err.classList.add('hidden');
+  input.classList.remove('border-red-500');
+
+  if (!trimmed) {
+    err.textContent = 'Enter your name, ID number, or reference code.';
+    err.classList.remove('hidden');
+    input.classList.add('border-red-500');
+    return;
+  }
+
+  // Match against name (case-insensitive), id_number (exact),
+  // or token / reference (case-insensitive).
+  const lower = trimmed.toLowerCase();
+  const entry = state.entries
+    .filter(en => en.status !== 'seen')
+    .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    .find(en =>
+      en.name.toLowerCase() === lower ||
+      en.id_number === trimmed ||
+      en.token.toLowerCase() === lower
+    );
+
+  if (!entry) {
+    err.textContent = 'We could not find an active queue entry matching that name, ID number, or reference code. Check what you entered and try again, or speak to a member of staff.';
+    err.classList.remove('hidden');
+    input.classList.add('border-red-500');
+    return;
+  }
+  state.currentToken = entry.token;
+  save();
+  document.getElementById('lookup-form').reset();
+  go('queue');
+});
+
+// Reactive clear for the lookup field.
+document.getElementById('lk-id-number').addEventListener('input', () => {
+  const err = document.getElementById('lk-error');
+  err.classList.add('hidden');
+  document.getElementById('lk-id-number').classList.remove('border-red-500');
+});
+
+// ============================================================
+// QR code (mirrors /admin/qr)
+// ============================================================
+function renderQr() {
+  const canvas = document.getElementById('qr-canvas');
+  const urlEl = document.getElementById('qr-url');
+  if (!canvas || !urlEl) return;
+  const target = location.origin && location.origin !== 'null'
+    ? location.origin + location.pathname
+    : 'https://example.com';
+  urlEl.textContent = target;
+  if (typeof QRious !== 'undefined') {
+    new QRious({
+      element: canvas,
+      value: target,
+      size: 280,
+      level: 'M',
+      foreground: '#0b6e4f',
+      background: '#ffffff',
+      padding: 8,
+    });
+  } else {
+    const ctx = canvas.getContext('2d');
+    canvas.width = 280; canvas.height = 80;
+    ctx.fillStyle = '#f1f5f9'; ctx.fillRect(0, 0, 280, 80);
+    ctx.fillStyle = '#475569';
+    ctx.font = '14px sans-serif';
+    ctx.fillText('QR library not loaded', 60, 45);
+  }
+}
+document.getElementById('qr-print').addEventListener('click', () => window.print());
+document.getElementById('qr-refresh').addEventListener('click', renderQr);
+
+// ============================================================
+// Render dispatch
+// ============================================================
+function render() {
+  renderSigninForm();
+  renderQueue();
+  renderDisplay();
+  renderStaff();
+  renderPharmacy();
+  renderQr();
+  updateDisplayClock();
+  paintPoweredBy();
+}
+function escapeHtml(s) {
+  return (s ?? '').toString().replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+render();
+setInterval(() => { renderDisplay(); renderStaff(); renderPharmacy(); }, 5000);  // refresh wait-time labels
+</script>
+
+</body>
+</html>
