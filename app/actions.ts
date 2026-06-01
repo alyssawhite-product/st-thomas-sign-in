@@ -7,6 +7,7 @@ import {
   createEntry,
   findEntryByIdNumber,
   findEntryByQuery,
+  getEntryByToken,
   markSeen,
   priorityInsert,
   resetToday,
@@ -15,10 +16,11 @@ import {
   transferEntry,
 } from "@/lib/queue";
 import { createSSRClient, getStaffSession, requireRole } from "@/lib/auth-server";
-import { VISIT_TYPE_VALUES } from "@/lib/types";
-import type { HasPrescription, StaffRole } from "@/lib/types";
+import { COUNTRY_VALUES, VISIT_TYPE_VALUES } from "@/lib/types";
+import type { HasPrescription, Nationality, StaffRole } from "@/lib/types";
 
 const PRESCRIPTION_VALUES: HasPrescription[] = ["yes", "no", "electronic"];
+const NATIONALITY_VALUES: Nationality[] = ["national", "non_national"];
 
 function actorFromSession(session: { id: string; email: string } | null) {
   return {
@@ -31,6 +33,8 @@ function actorFromSession(session: { id: string; email: string } | null) {
 
 export async function signInAction(formData: FormData): Promise<void> {
   const name = String(formData.get("name") ?? "").trim();
+  const rawNationality = String(formData.get("nationality") ?? "").trim();
+  const rawCountry = String(formData.get("country_of_origin") ?? "").trim();
   const idType = String(formData.get("id_type") ?? "").trim();
   const idNumber = String(formData.get("id_number") ?? "").trim();
   const visitType = String(formData.get("visit_type") ?? "").trim();
@@ -40,8 +44,29 @@ export async function signInAction(formData: FormData): Promise<void> {
   // checks for inline UX; if anything slips past the client, we still
   // reject here with the same error codes.
   if (name.length < 2) throw new Error("NAME_TOO_SHORT");
+  if (!NATIONALITY_VALUES.includes(rawNationality as Nationality)) {
+    throw new Error("NATIONALITY_REQUIRED");
+  }
+  const nationality = rawNationality as Nationality;
+
+  // National branch: ID type is forced to national_id (Barbados National ID).
+  // Non-National branch: country + ID type (national_id | passport) + ID number.
+  let effectiveIdType: string;
+  let countryOfOrigin: string | null = null;
+  if (nationality === "national") {
+    effectiveIdType = "national_id";
+  } else {
+    if (!COUNTRY_VALUES.includes(rawCountry)) {
+      throw new Error("COUNTRY_REQUIRED");
+    }
+    countryOfOrigin = rawCountry;
+    if (!["national_id", "passport"].includes(idType)) {
+      throw new Error("ID_TYPE_INVALID");
+    }
+    effectiveIdType = idType;
+  }
+
   if (!idNumber) throw new Error("ID_NUMBER_REQUIRED");
-  if (!["national_id", "passport"].includes(idType)) throw new Error("ID_TYPE_INVALID");
   if (!VISIT_TYPE_VALUES.includes(visitType as (typeof VISIT_TYPE_VALUES)[number])) {
     throw new Error("VISIT_TYPE_INVALID");
   }
@@ -62,7 +87,15 @@ export async function signInAction(formData: FormData): Promise<void> {
       ? (rawPrescription as HasPrescription)
       : null;
 
-  const entry = await createEntry({ name, idType, idNumber, visitType, hasPrescription });
+  const entry = await createEntry({
+    name,
+    idType: effectiveIdType,
+    idNumber,
+    visitType,
+    hasPrescription,
+    nationality,
+    countryOfOrigin,
+  });
   redirect(`/queue/${entry.token}`);
 }
 
@@ -205,6 +238,31 @@ export async function lookupPatientAction(formData: FormData): Promise<void> {
   redirect(`/queue/${entry.token}`);
 }
 
-// Patients can no longer self-transfer (clinic feedback after the May 19
-// demo). All transfers now go through the staff/pharmacist dashboard via
-// staffTransferAction above.
+// Patient-initiated transfer. Restored from the May 27 clinic stakeholder
+// meeting -- patients can move themselves between departments. Possession
+// of the queue token serves as the patient's authentication.
+export async function patientTransferAction(formData: FormData): Promise<void> {
+  const token = String(formData.get("token") ?? "").trim();
+  const newVisitType = String(formData.get("visit_type") ?? "").trim();
+  const rawPrescription = String(formData.get("has_prescription") ?? "").trim();
+  if (!token) throw new Error("Missing token");
+  if (!VISIT_TYPE_VALUES.includes(newVisitType as (typeof VISIT_TYPE_VALUES)[number])) {
+    throw new Error("Invalid visit type");
+  }
+  const entry = await getEntryByToken(token);
+  if (!entry) throw new Error("Queue entry not found");
+
+  const hasPrescription =
+    PRESCRIPTION_VALUES.includes(rawPrescription as HasPrescription)
+      ? (rawPrescription as HasPrescription)
+      : null;
+
+  await transferEntry({
+    id: entry.id,
+    newVisitType,
+    hasPrescription,
+    actorId: null,
+    actorLabel: `patient:${token}`,
+  });
+  redirect(`/queue/${token}`);
+}

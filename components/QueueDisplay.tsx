@@ -42,7 +42,7 @@ function announcePatient(entry: QueueEntry) {
   const voice = getFemaleVoice();
   if (!voice) return;
   const stream = streamFor(entry.visit_type);
-  const where = stream === "pharmacy" ? "the pharmacy window" : "the front desk";
+  const where = stream === "pharmacy" ? "the pharmacy window" : "the General Clinic";
   const ticket = entry.ticket_number ?? 0;
   const msg = new SpeechSynthesisUtterance(
     `Number ${ticket}, ${maskedDisplayName(entry.name)}. Please go to ${where}.`,
@@ -226,7 +226,7 @@ export function QueueDisplay({ initialEntries }: Props) {
                 <div className="mt-1 text-6xl font-black">#{e.ticket_number ?? "—"}</div>
                 <div className="mt-1 text-2xl font-bold">{maskedDisplayName(e.name)}</div>
                 <div className="mt-0.5 text-sm">
-                  {stream === "pharmacy" ? "Please go to the pharmacy window" : "Please go to the front desk"}
+                  {stream === "pharmacy" ? "Please go to the pharmacy window" : "Please go to the General Clinic"}
                 </div>
               </div>
             );

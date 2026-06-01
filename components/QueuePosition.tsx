@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { getBrowserSupabase } from "@/lib/supabase";
 import type { QueueEntry, QueueStatus } from "@/lib/types";
-import { streamFor } from "@/lib/types";
+import { VISIT_TYPES, streamFor } from "@/lib/types";
+import { patientTransferAction } from "@/app/actions";
 
 const AVG_MINUTES_PER_PATIENT = 8;
 const KIOSK_TIMEOUT_SECONDS = 10;
@@ -18,6 +19,7 @@ interface State {
   status: QueueStatus;
   ahead: number;
   visitType: string;
+  ticketNumber: number | null;
   createdAt: string;
 }
 
@@ -27,6 +29,7 @@ export function QueuePosition({ initialEntry, initialAhead }: Props) {
     status: initialEntry.status,
     ahead: initialAhead,
     visitType: initialEntry.visit_type,
+    ticketNumber: initialEntry.ticket_number,
     createdAt: initialEntry.created_at,
   });
   const [kioskSecondsLeft, setKioskSecondsLeft] = useState<number | null>(null);
@@ -63,7 +66,7 @@ export function QueuePosition({ initialEntry, initialAhead }: Props) {
 
       const { data: meRow } = await supabase
         .from("queue_entries")
-        .select("status, created_at, visit_type")
+        .select("status, created_at, visit_type, ticket_number")
         .eq("id", initialEntry.id)
         .maybeSingle();
 
@@ -89,6 +92,7 @@ export function QueuePosition({ initialEntry, initialAhead }: Props) {
         status: (meRow.status as QueueStatus) ?? "waiting",
         ahead: meRow.status === "waiting" ? filteredAhead.length : 0,
         visitType: meRow.visit_type as string,
+        ticketNumber: (meRow.ticket_number as number | null) ?? null,
         createdAt: meRow.created_at as string,
       });
     }
@@ -130,8 +134,13 @@ export function QueuePosition({ initialEntry, initialAhead }: Props) {
               ? "Pharmacist is preparing your order"
               : "You're being called"}
           </p>
-          <h2 className="mt-3 text-3xl font-bold text-amber-900">
-            Please go to {isPharmacy ? "the pharmacy window" : "the desk"}
+          {state.ticketNumber !== null && (
+            <p className="mt-2 text-5xl font-black text-amber-900">
+              #{state.ticketNumber}
+            </p>
+          )}
+          <h2 className="mt-3 text-2xl font-bold text-amber-900">
+            Please go to {isPharmacy ? "the pharmacy window" : "the General Clinic"}
           </h2>
         </section>
         {kioskBanner}
@@ -157,10 +166,20 @@ export function QueuePosition({ initialEntry, initialAhead }: Props) {
   return (
     <>
       <section className="rounded-xl bg-brand-light p-8 text-center">
-        <p className="text-sm font-semibold uppercase tracking-wide text-brand">
+        {state.ticketNumber !== null && (
+          <>
+            <p className="text-sm font-semibold uppercase tracking-wide text-brand">
+              Your ticket
+            </p>
+            <p className="mt-1 text-5xl font-black text-brand-dark">
+              #{state.ticketNumber}
+            </p>
+          </>
+        )}
+        <p className="mt-4 text-sm font-semibold uppercase tracking-wide text-brand">
           Your queue position
         </p>
-        <p className="mt-2 text-7xl font-bold text-brand-dark">{position}</p>
+        <p className="mt-1 text-6xl font-bold text-brand-dark">{position}</p>
         <p className="mt-3 text-slate-700">
           {state.ahead === 0
             ? "You're next."
@@ -172,7 +191,108 @@ export function QueuePosition({ initialEntry, initialAhead }: Props) {
           </p>
         )}
       </section>
+      <TransferForm token={initialEntry.token} currentVisitType={state.visitType} />
       {kioskBanner}
     </>
+  );
+}
+
+function TransferForm({ token, currentVisitType }: { token: string; currentVisitType: string }) {
+  const [pending, startTransition] = useTransition();
+  const [error, setError] = useState<string | null>(null);
+  const [picking, setPicking] = useState<string | null>(null);
+  const otherTypes = VISIT_TYPES.filter((v) => v.value !== currentVisitType);
+
+  function onTransfer(visitType: string, hasPrescription?: string) {
+    setError(null);
+    const fd = new FormData();
+    fd.set("token", token);
+    fd.set("visit_type", visitType);
+    if (hasPrescription) fd.set("has_prescription", hasPrescription);
+    startTransition(async () => {
+      try {
+        await patientTransferAction(fd);
+      } catch (err) {
+        if (
+          err &&
+          typeof err === "object" &&
+          "digest" in err &&
+          typeof (err as { digest?: unknown }).digest === "string" &&
+          (err as { digest: string }).digest.startsWith("NEXT_REDIRECT")
+        ) {
+          throw err;
+        }
+        setError("Transfer failed. Please try again.");
+      }
+    });
+  }
+
+  return (
+    <div className="mt-6 rounded-xl border border-slate-200 p-5">
+      <p className="text-sm font-semibold text-slate-700">Need to visit another department?</p>
+      <p className="mt-1 text-sm text-slate-500">
+        You&apos;ll be placed at the end of the new queue.
+      </p>
+      <div className="mt-3 flex flex-wrap gap-2">
+        {otherTypes.map((v) => (
+          <button
+            key={v.value}
+            type="button"
+            disabled={pending}
+            onClick={() => {
+              if (v.value === "pharmacy") {
+                setPicking("pharmacy");
+              } else {
+                onTransfer(v.value);
+              }
+            }}
+            className="rounded-lg border border-brand px-4 py-2 text-sm font-semibold text-brand hover:bg-brand-light disabled:opacity-50"
+          >
+            Move to {v.label}
+          </button>
+        ))}
+      </div>
+
+      {picking === "pharmacy" && (
+        <div className="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3">
+          <p className="text-sm font-medium text-slate-700">Do you have a prescription?</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => onTransfer("pharmacy", "yes")}
+              className="rounded-md bg-brand px-3 py-1.5 text-sm font-semibold text-white"
+            >
+              Paper in hand
+            </button>
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => onTransfer("pharmacy", "electronic")}
+              className="rounded-md bg-brand px-3 py-1.5 text-sm font-semibold text-white"
+            >
+              Electronic on file
+            </button>
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => onTransfer("pharmacy", "no")}
+              className="rounded-md bg-brand px-3 py-1.5 text-sm font-semibold text-white"
+            >
+              No prescription
+            </button>
+            <button
+              type="button"
+              onClick={() => setPicking(null)}
+              className="rounded-md bg-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-700"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+    </div>
   );
 }

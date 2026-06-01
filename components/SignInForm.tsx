@@ -3,23 +3,29 @@
 import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { signInAction } from "@/app/actions";
-import { PRESCRIPTION_OPTIONS, VISIT_TYPES } from "@/lib/types";
+import { COUNTRY_OPTIONS, PRESCRIPTION_OPTIONS, VISIT_TYPES } from "@/lib/types";
 
 interface Props {
   kiosk?: boolean;
 }
 
-type FieldKey = "name" | "id_number" | "visit_type" | "has_prescription";
+type FieldKey =
+  | "name"
+  | "nationality"
+  | "country_of_origin"
+  | "id_number"
+  | "visit_type"
+  | "has_prescription";
 
 interface DuplicateError {
   kind: "duplicate";
   idNumber: string;
 }
 
-// Maps the FieldKey to the focusable input + a human label used in the
-// summary box.
 const FIELD_META: Record<FieldKey, { anchor: string; label: string }> = {
   name: { anchor: "name", label: "Your name" },
+  nationality: { anchor: "nationality_national", label: "Nationality" },
+  country_of_origin: { anchor: "country_of_origin", label: "Country of origin" },
   id_number: { anchor: "id_number", label: "Identification number" },
   visit_type: { anchor: "visit_type_general", label: "Type of visit" },
   has_prescription: { anchor: "has_prescription_yes", label: "Prescription" },
@@ -27,11 +33,15 @@ const FIELD_META: Record<FieldKey, { anchor: string; label: string }> = {
 
 function validate({
   name,
+  nationality,
+  country,
   idNumber,
   visitType,
   hasPrescription,
 }: {
   name: string;
+  nationality: string;
+  country: string;
   idNumber: string;
   visitType: string;
   hasPrescription: string;
@@ -39,6 +49,12 @@ function validate({
   const errors: Partial<Record<FieldKey, string>> = {};
   if (name.trim().length < 2) {
     errors.name = "Enter a name that is at least 2 characters.";
+  }
+  if (nationality !== "national" && nationality !== "non_national") {
+    errors.nationality = "Tell us whether you are a national or non-national.";
+  }
+  if (nationality === "non_national" && !country) {
+    errors.country_of_origin = "Choose your country of origin.";
   }
   if (!idNumber.trim()) {
     errors.id_number = "Enter your ID number.";
@@ -54,6 +70,10 @@ function validate({
 
 export function SignInForm({ kiosk }: Props) {
   const [pending, startTransition] = useTransition();
+  // Nationality drives which ID-type controls are visible.
+  const [nationality, setNationality] = useState<"" | "national" | "non_national">("");
+  const [country, setCountry] = useState<string>("");
+  // For non-nationals only. Nationals are forced to national_id.
   const [idType, setIdType] = useState<"national_id" | "passport">("national_id");
   const [name, setName] = useState("");
   const [idNumber, setIdNumber] = useState("");
@@ -68,8 +88,6 @@ export function SignInForm({ kiosk }: Props) {
     if (kiosk) localStorage.setItem("kiosk", "true");
   }, [kiosk]);
 
-  // Reactive clearing: as soon as the user changes a field, its inline
-  // error disappears. The summary box updates from the same state.
   function clearError(field: FieldKey) {
     setErrors((prev) => {
       if (!prev[field]) return prev;
@@ -82,21 +100,32 @@ export function SignInForm({ kiosk }: Props) {
   }
 
   function onSubmit() {
-    const fieldErrors = validate({ name, idNumber, visitType, hasPrescription });
+    const fieldErrors = validate({
+      name,
+      nationality,
+      country,
+      idNumber,
+      visitType,
+      hasPrescription,
+    });
     setErrors(fieldErrors);
     setDuplicateError(null);
     setGenericError(null);
 
     if (Object.keys(fieldErrors).length > 0) {
-      // Send focus to the summary box so screen-readers announce it and
-      // sighted users see it.
       setTimeout(() => summaryRef.current?.focus(), 0);
       return;
     }
 
+    // Nationals are always identified by Barbados National ID; non-nationals
+    // pick between National ID and Passport.
+    const effectiveIdType = nationality === "national" ? "national_id" : idType;
+
     const fd = new FormData();
     fd.set("name", name.trim());
-    fd.set("id_type", idType);
+    fd.set("nationality", nationality);
+    if (nationality === "non_national") fd.set("country_of_origin", country);
+    fd.set("id_type", effectiveIdType);
     fd.set("id_number", idNumber.trim());
     fd.set("visit_type", visitType);
     if (visitType === "pharmacy") fd.set("has_prescription", hasPrescription);
@@ -120,10 +149,12 @@ export function SignInForm({ kiosk }: Props) {
           setTimeout(() => summaryRef.current?.focus(), 0);
           return;
         }
-        // Map known server-side error codes back to inline messages.
         const codeMap: Record<string, { field: FieldKey; msg: string }> = {
           NAME_TOO_SHORT: { field: "name", msg: "Enter a name that is at least 2 characters." },
+          NATIONALITY_REQUIRED: { field: "nationality", msg: "Tell us whether you are a national or non-national." },
+          COUNTRY_REQUIRED: { field: "country_of_origin", msg: "Choose your country of origin." },
           ID_NUMBER_REQUIRED: { field: "id_number", msg: "Enter your ID number." },
+          ID_TYPE_INVALID: { field: "id_number", msg: "Choose a valid ID type." },
           VISIT_TYPE_INVALID: { field: "visit_type", msg: "Choose a type of visit." },
           PRESCRIPTION_REQUIRED: { field: "has_prescription", msg: "Tell us about your prescription." },
         };
@@ -145,9 +176,28 @@ export function SignInForm({ kiosk }: Props) {
     el.scrollIntoView({ behavior: "smooth", block: "center" });
   }
 
-  const orderedErrorKeys: FieldKey[] = ["name", "id_number", "visit_type", "has_prescription"];
+  const orderedErrorKeys: FieldKey[] = [
+    "name",
+    "nationality",
+    "country_of_origin",
+    "id_number",
+    "visit_type",
+    "has_prescription",
+  ];
   const visibleErrors = orderedErrorKeys.filter((k) => errors[k]);
   const showSummary = visibleErrors.length > 0 || duplicateError !== null || genericError !== null;
+
+  // Helpful copy that adapts to which branch the user is on.
+  const idNumberLabel =
+    nationality === "national"
+      ? "Your Barbados National ID number"
+      : nationality === "non_national" && idType === "passport"
+      ? "Your Passport number"
+      : nationality === "non_national"
+      ? "Your National ID number"
+      : "ID number";
+  const idNumberPlaceholder =
+    nationality === "non_national" && idType === "passport" ? "e.g. A1234567" : "e.g. 1234567890";
 
   return (
     <form
@@ -221,39 +271,121 @@ export function SignInForm({ kiosk }: Props) {
         )}
       </div>
 
-      <div>
-        <span className="field-label block mb-2">Identification Number</span>
-        <div className="flex gap-3 mb-3">
-          <label className="flex cursor-pointer items-center gap-2 rounded-md border px-4 py-2.5 text-sm font-medium has-[:checked]:border-brand has-[:checked]:bg-brand-light border-slate-300">
+      {/* Step 1 (per May 27 stakeholder feedback): nationality. Drives the
+          rest of the identification questions. */}
+      <fieldset>
+        <legend className="field-label">Are you a Barbadian national?</legend>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          <label className="flex cursor-pointer items-center gap-3 rounded-md border border-slate-300 px-4 py-3 text-base has-[:checked]:border-brand has-[:checked]:bg-brand-light">
             <input
+              id="nationality_national"
               type="radio"
-              name="id_type"
-              value="national_id"
-              checked={idType === "national_id"}
-              onChange={() => setIdType("national_id")}
-              className="h-4 w-4 accent-brand"
+              name="nationality"
+              value="national"
+              checked={nationality === "national"}
+              onChange={() => {
+                setNationality("national");
+                setIdType("national_id");
+                setCountry("");
+                clearError("nationality");
+              }}
+              className="h-5 w-5 shrink-0 accent-brand"
             />
-            National ID number
+            <span className="font-medium">National</span>
           </label>
-          <label className="flex cursor-pointer items-center gap-2 rounded-md border px-4 py-2.5 text-sm font-medium has-[:checked]:border-brand has-[:checked]:bg-brand-light border-slate-300">
+          <label className="flex cursor-pointer items-center gap-3 rounded-md border border-slate-300 px-4 py-3 text-base has-[:checked]:border-brand has-[:checked]:bg-brand-light">
             <input
+              id="nationality_non_national"
               type="radio"
-              name="id_type"
-              value="passport"
-              checked={idType === "passport"}
-              onChange={() => setIdType("passport")}
-              className="h-4 w-4 accent-brand"
+              name="nationality"
+              value="non_national"
+              checked={nationality === "non_national"}
+              onChange={() => {
+                setNationality("non_national");
+                clearError("nationality");
+              }}
+              className="h-5 w-5 shrink-0 accent-brand"
             />
-            Passport Number
+            <span className="font-medium">Non-National</span>
           </label>
         </div>
+        {errors.nationality && (
+          <p className="mt-2 text-sm font-medium text-red-700">{errors.nationality}</p>
+        )}
+      </fieldset>
+
+      {/* Non-National branch only: country of origin + ID type. */}
+      {nationality === "non_national" && (
+        <>
+          <div>
+            <label htmlFor="country_of_origin" className="field-label">
+              Country of origin
+            </label>
+            <select
+              id="country_of_origin"
+              name="country_of_origin"
+              className={`field-input ${errors.country_of_origin ? "border-red-500" : ""}`}
+              value={country}
+              onChange={(e) => {
+                setCountry(e.target.value);
+                clearError("country_of_origin");
+              }}
+              aria-invalid={!!errors.country_of_origin}
+            >
+              <option value="">Choose a country&hellip;</option>
+              {COUNTRY_OPTIONS.map((c) => (
+                <option key={c.value} value={c.value}>
+                  {c.label}
+                </option>
+              ))}
+            </select>
+            {errors.country_of_origin && (
+              <p className="mt-1 text-sm font-medium text-red-700">{errors.country_of_origin}</p>
+            )}
+          </div>
+
+          <div>
+            <span className="field-label block mb-2">Identification type</span>
+            <div className="flex gap-3">
+              <label className="flex cursor-pointer items-center gap-2 rounded-md border px-4 py-2.5 text-sm font-medium has-[:checked]:border-brand has-[:checked]:bg-brand-light border-slate-300">
+                <input
+                  type="radio"
+                  name="id_type"
+                  value="national_id"
+                  checked={idType === "national_id"}
+                  onChange={() => setIdType("national_id")}
+                  className="h-4 w-4 accent-brand"
+                />
+                National ID
+              </label>
+              <label className="flex cursor-pointer items-center gap-2 rounded-md border px-4 py-2.5 text-sm font-medium has-[:checked]:border-brand has-[:checked]:bg-brand-light border-slate-300">
+                <input
+                  type="radio"
+                  name="id_type"
+                  value="passport"
+                  checked={idType === "passport"}
+                  onChange={() => setIdType("passport")}
+                  className="h-4 w-4 accent-brand"
+                />
+                Passport
+              </label>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ID number -- label adapts to the chosen branch. */}
+      <div>
+        <label htmlFor="id_number" className="field-label">
+          {idNumberLabel}
+        </label>
         <input
           id="id_number"
           name="id_number"
           type="text"
           maxLength={30}
           className={`field-input ${errors.id_number || duplicateError ? "border-red-500" : ""}`}
-          placeholder={idType === "national_id" ? "e.g. 1234567890" : "e.g. A1234567"}
+          placeholder={idNumberPlaceholder}
           value={idNumber}
           onChange={(e) => {
             setIdNumber(e.target.value);

@@ -55,16 +55,44 @@
         <input id="si-name" maxlength="120" class="field-input" placeholder="e.g. Karen Williams" />
         <p id="si-name-error" class="mt-1 hidden text-sm font-medium text-red-700"></p>
       </div>
-      <div>
-        <span class="field-label block mb-2">Identification Number</span>
-        <div class="flex gap-3 mb-3">
-          <label class="flex cursor-pointer items-center gap-2 rounded-md border px-4 py-2.5 text-sm font-medium has-[:checked]:border-brand has-[:checked]:bg-brand-light border-slate-300">
-            <input type="radio" name="si-id-type" value="national_id" checked class="h-4 w-4 accent-emerald-700" /> National ID number
+
+      <fieldset>
+        <legend class="field-label">Are you a Barbadian national?</legend>
+        <div class="mt-3 grid gap-2 sm:grid-cols-2">
+          <label class="flex cursor-pointer items-center gap-3 rounded-md border border-slate-300 px-4 py-3 text-base has-[:checked]:border-brand has-[:checked]:bg-brand-light">
+            <input type="radio" name="si-nationality" value="national" class="h-5 w-5 shrink-0 accent-emerald-700" />
+            <span class="font-medium">National</span>
           </label>
-          <label class="flex cursor-pointer items-center gap-2 rounded-md border px-4 py-2.5 text-sm font-medium has-[:checked]:border-brand has-[:checked]:bg-brand-light border-slate-300">
-            <input type="radio" name="si-id-type" value="passport" class="h-4 w-4 accent-emerald-700" /> Passport Number
+          <label class="flex cursor-pointer items-center gap-3 rounded-md border border-slate-300 px-4 py-3 text-base has-[:checked]:border-brand has-[:checked]:bg-brand-light">
+            <input type="radio" name="si-nationality" value="non_national" class="h-5 w-5 shrink-0 accent-emerald-700" />
+            <span class="font-medium">Non-National</span>
           </label>
         </div>
+        <p id="si-nationality-error" class="mt-2 hidden text-sm font-medium text-red-700"></p>
+      </fieldset>
+
+      <div id="si-country-row" class="hidden">
+        <label for="si-country" class="field-label">Country of origin</label>
+        <select id="si-country" class="field-input">
+          <option value="">Choose a country…</option>
+        </select>
+        <p id="si-country-error" class="mt-1 hidden text-sm font-medium text-red-700"></p>
+      </div>
+
+      <div id="si-id-type-row" class="hidden">
+        <span class="field-label block mb-2">Identification type</span>
+        <div class="flex gap-3">
+          <label class="flex cursor-pointer items-center gap-2 rounded-md border px-4 py-2.5 text-sm font-medium has-[:checked]:border-brand has-[:checked]:bg-brand-light border-slate-300">
+            <input type="radio" name="si-id-type" value="national_id" checked class="h-4 w-4 accent-emerald-700" /> National ID
+          </label>
+          <label class="flex cursor-pointer items-center gap-2 rounded-md border px-4 py-2.5 text-sm font-medium has-[:checked]:border-brand has-[:checked]:bg-brand-light border-slate-300">
+            <input type="radio" name="si-id-type" value="passport" class="h-4 w-4 accent-emerald-700" /> Passport
+          </label>
+        </div>
+      </div>
+
+      <div>
+        <label for="si-id-number" id="si-id-number-label" class="field-label">ID number</label>
         <input id="si-id-number" maxlength="30" class="field-input" placeholder="e.g. 1234567890" />
         <p id="si-id-number-error" class="mt-1 hidden text-sm font-medium text-red-700"></p>
         <p id="si-duplicate" class="mt-1 hidden text-sm font-medium text-red-700"></p>
@@ -128,6 +156,21 @@
         Go to <a id="q-lookup-url" class="font-semibold text-brand hover:underline" href="#">your lookup URL</a> and enter your name, ID number, or reference code.
       </p>
     </section>
+
+    <div id="q-transfer-box" class="mt-6 rounded-xl border border-slate-200 p-5 hidden">
+      <p class="text-sm font-semibold text-slate-700">Need to visit another department?</p>
+      <p class="mt-1 text-sm text-slate-500">You'll be placed at the end of the new queue.</p>
+      <div class="mt-3 flex flex-wrap gap-2" id="q-transfer-buttons"></div>
+      <div id="q-prescription-prompt" class="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3 hidden">
+        <p class="text-sm font-medium text-slate-700">Do you have a prescription?</p>
+        <div class="mt-2 flex flex-wrap gap-2">
+          <button type="button" data-rx="yes" class="rx-pick rounded-md bg-brand px-3 py-1.5 text-sm font-semibold text-white">Paper in hand</button>
+          <button type="button" data-rx="electronic" class="rx-pick rounded-md bg-brand px-3 py-1.5 text-sm font-semibold text-white">Electronic on file</button>
+          <button type="button" data-rx="no" class="rx-pick rounded-md bg-brand px-3 py-1.5 text-sm font-semibold text-white">No prescription</button>
+          <button type="button" id="rx-cancel" class="rounded-md bg-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-700">Cancel</button>
+        </div>
+      </div>
+    </div>
 
     <p class="mt-8 text-sm text-slate-600">
       Take a seat in the waiting area. You will be called by name when it is your turn.
@@ -378,6 +421,32 @@ const PRESCRIPTION_OPTIONS = [
   { value: 'electronic', label: 'Electronic prescription on file', description: "My doctor sent it to the pharmacy already." },
   { value: 'no', label: 'No prescription yet', description: "I'm here to ask about a medication or pick something up without a prescription." },
 ];
+const COUNTRY_OPTIONS = [
+  // CARICOM (excluding Barbados; that's the National branch)
+  { value: 'AG', label: 'Antigua and Barbuda' },
+  { value: 'BS', label: 'Bahamas' },
+  { value: 'BZ', label: 'Belize' },
+  { value: 'DM', label: 'Dominica' },
+  { value: 'GD', label: 'Grenada' },
+  { value: 'GY', label: 'Guyana' },
+  { value: 'HT', label: 'Haiti' },
+  { value: 'JM', label: 'Jamaica' },
+  { value: 'MS', label: 'Montserrat' },
+  { value: 'KN', label: 'Saint Kitts and Nevis' },
+  { value: 'LC', label: 'Saint Lucia' },
+  { value: 'VC', label: 'Saint Vincent and the Grenadines' },
+  { value: 'SR', label: 'Suriname' },
+  { value: 'TT', label: 'Trinidad and Tobago' },
+  // Top non-CARICOM visitor sources
+  { value: 'GB', label: 'United Kingdom' },
+  { value: 'US', label: 'United States' },
+  { value: 'CA', label: 'Canada' },
+  { value: 'DE', label: 'Germany' },
+  { value: 'BR', label: 'Brazil' },
+  { value: 'CN', label: 'China' },
+  { value: 'IN', label: 'India' },
+  { value: 'OTHER', label: 'Other' },
+];
 const STAFF_ACCOUNTS = [
   { email: 'admin@stthomas.demo', password: 'DemoPass1!', role: 'admin' },
   { email: 'clinician@stthomas.demo', password: 'DemoPass1!', role: 'clinician' },
@@ -510,7 +579,7 @@ let state = load();
 function streamFor(visitType) {
   return visitType === 'pharmacy' ? 'pharmacy' : 'clinical';
 }
-function streamLabel(s) { return s === 'pharmacy' ? 'Pharmacy' : 'Doctor'; }
+function streamLabel(s) { return s === 'pharmacy' ? 'Pharmacy' : 'General Clinic'; }
 function makeToken() {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let t = '';
@@ -533,7 +602,7 @@ function waitMinutes(iso) {
 // ============================================================
 // Mutations
 // ============================================================
-function createEntry({ name, idType, idNumber, visitType, hasPrescription }) {
+function createEntry({ name, idType, idNumber, visitType, hasPrescription, nationality, countryOfOrigin }) {
   const stream = streamFor(visitType);
   const ticketNumber = state.nextTicketByStream[stream]++;
   const entry = {
@@ -548,6 +617,8 @@ function createEntry({ name, idType, idNumber, visitType, hasPrescription }) {
     transferred_from: null,
     pharmacy_notes: null,
     has_prescription: visitType === 'pharmacy' ? (hasPrescription || null) : null,
+    nationality: nationality || null,
+    country_of_origin: nationality === 'non_national' ? (countryOfOrigin || null) : null,
     created_at: new Date().toISOString(),
     called_at: null,
     seen_at: null,
@@ -682,7 +753,6 @@ document.querySelectorAll('.nav-btn').forEach(b => {
 // ============================================================
 function renderSigninForm() {
   const wrap = document.getElementById('si-visit-types');
-  // First radio gets a stable id so the summary anchor can focus it.
   wrap.innerHTML = VISIT_TYPES.map((v, i) => `
     <label class="flex cursor-pointer items-start gap-3 rounded-md border border-slate-300 px-4 py-3 text-base has-[:checked]:border-brand has-[:checked]:bg-brand-light">
       <input ${i === 0 ? 'id="visit-type-general"' : ''} type="radio" name="si-visit-type" value="${v.value}" class="mt-0.5 h-5 w-5 shrink-0 accent-emerald-700" />
@@ -710,14 +780,61 @@ function renderSigninForm() {
     r.addEventListener('change', () => siClearFieldError('has-prescription'));
   });
 
-  // ID-type radios drive the placeholder of the ID input.
-  document.querySelectorAll('input[name="si-id-type"]').forEach(r => {
+  // Populate the country dropdown once.
+  const countrySel = document.getElementById('si-country');
+  if (countrySel && countrySel.options.length <= 1) {
+    COUNTRY_OPTIONS.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.value;
+      opt.textContent = c.label;
+      countrySel.appendChild(opt);
+    });
+    countrySel.addEventListener('change', () => siClearFieldError('country'));
+  }
+
+  // Nationality radios show/hide country + ID-type, and tweak ID label.
+  document.querySelectorAll('input[name="si-nationality"]').forEach(r => {
     r.addEventListener('change', () => {
-      const sel = document.querySelector('input[name="si-id-type"]:checked').value;
-      document.getElementById('si-id-number').placeholder =
-        sel === 'national_id' ? 'e.g. 1234567890' : 'e.g. A1234567';
+      const v = document.querySelector('input[name="si-nationality"]:checked')?.value;
+      const isNonNational = v === 'non_national';
+      document.getElementById('si-country-row').classList.toggle('hidden', !isNonNational);
+      document.getElementById('si-id-type-row').classList.toggle('hidden', !isNonNational);
+      // Nationals are forced to national_id.
+      if (!isNonNational) {
+        const natRadio = document.querySelector('input[name="si-id-type"][value="national_id"]');
+        if (natRadio) natRadio.checked = true;
+      }
+      siUpdateIdLabel();
+      siClearFieldError('nationality');
     });
   });
+
+  // ID-type radios drive the label + placeholder of the ID input.
+  document.querySelectorAll('input[name="si-id-type"]').forEach(r => {
+    r.addEventListener('change', siUpdateIdLabel);
+  });
+  siUpdateIdLabel();
+}
+
+function siUpdateIdLabel() {
+  const nationality = document.querySelector('input[name="si-nationality"]:checked')?.value;
+  const idType = document.querySelector('input[name="si-id-type"]:checked')?.value || 'national_id';
+  const labelEl = document.getElementById('si-id-number-label');
+  const input = document.getElementById('si-id-number');
+  if (!labelEl || !input) return;
+  if (nationality === 'national') {
+    labelEl.textContent = 'Your Barbados National ID number';
+    input.placeholder = 'e.g. 1234567890';
+  } else if (nationality === 'non_national' && idType === 'passport') {
+    labelEl.textContent = 'Your Passport number';
+    input.placeholder = 'e.g. A1234567';
+  } else if (nationality === 'non_national') {
+    labelEl.textContent = 'Your National ID number';
+    input.placeholder = 'e.g. 1234567890';
+  } else {
+    labelEl.textContent = 'ID number';
+    input.placeholder = 'e.g. 1234567890';
+  }
 }
 function updatePrescriptionVisibility() {
   const picked = document.querySelector('input[name="si-visit-type"]:checked');
@@ -725,9 +842,11 @@ function updatePrescriptionVisibility() {
   document.getElementById('si-prescription-fs').classList.toggle('hidden', !show);
 }
 // --- Sign-in: full-form validation with summary, inline errors, reactive clear -----
-const SI_FIELDS = ['name', 'id-number', 'visit-type', 'has-prescription'];
+const SI_FIELDS = ['name', 'nationality', 'country', 'id-number', 'visit-type', 'has-prescription'];
 const SI_FIELD_META = {
   'name': { input: 'si-name', label: 'Your name', emptyMsg: 'Enter a name that is at least 2 characters.' },
+  'nationality': { input: 'si-name', label: 'Nationality', emptyMsg: 'Tell us whether you are a national or non-national.' },
+  'country': { input: 'si-country', label: 'Country of origin', emptyMsg: 'Choose your country of origin.' },
   'id-number': { input: 'si-id-number', label: 'Identification number', emptyMsg: 'Enter your ID number.' },
   'visit-type': { input: 'visit-type-general', label: 'Type of visit', emptyMsg: 'Choose a type of visit.' },
   'has-prescription': { input: 'has-prescription-yes', label: 'Prescription', emptyMsg: 'Tell us about your prescription.' },
@@ -803,7 +922,12 @@ document.getElementById('signin-form').addEventListener('submit', (e) => {
   siClearAllErrors();
 
   const name = document.getElementById('si-name').value;
-  const idType = document.querySelector('input[name="si-id-type"]:checked').value;
+  const nationality = document.querySelector('input[name="si-nationality"]:checked')?.value || '';
+  const country = document.getElementById('si-country').value;
+  // Nationals are always national_id; non-nationals respect the radio.
+  const idType = nationality === 'national'
+    ? 'national_id'
+    : (document.querySelector('input[name="si-id-type"]:checked')?.value || 'national_id');
   const idNumber = document.getElementById('si-id-number').value.trim();
   const visitTypeEl = document.querySelector('input[name="si-visit-type"]:checked');
   const visitType = visitTypeEl ? visitTypeEl.value : '';
@@ -813,6 +937,14 @@ document.getElementById('signin-form').addEventListener('submit', (e) => {
   let hasError = false;
   if (name.trim().length < 2) {
     siShowFieldError('name', 'Enter a name that is at least 2 characters.');
+    hasError = true;
+  }
+  if (nationality !== 'national' && nationality !== 'non_national') {
+    siShowFieldError('nationality', 'Tell us whether you are a national or non-national.');
+    hasError = true;
+  }
+  if (nationality === 'non_national' && !country) {
+    siShowFieldError('country', 'Choose your country of origin.');
     hasError = true;
   }
   if (!idNumber) {
@@ -834,7 +966,6 @@ document.getElementById('signin-form').addEventListener('submit', (e) => {
     return;
   }
 
-  // Duplicate-ID guard.
   if (siFindDuplicate(idNumber)) {
     const dup = document.getElementById('si-duplicate');
     dup.innerHTML = `This ID number is already checked in today. <button type="button" data-si-lookup-prefill="${escapeHtml(idNumber)}" class="font-semibold underline hover:text-red-900">Find your place in the queue</button> below.`;
@@ -845,12 +976,22 @@ document.getElementById('signin-form').addEventListener('submit', (e) => {
     return;
   }
 
-  createEntry({ name: name.trim(), idType, idNumber, visitType, hasPrescription: rx || null });
+  createEntry({
+    name: name.trim(),
+    idType,
+    idNumber,
+    visitType,
+    hasPrescription: rx || null,
+    nationality,
+    countryOfOrigin: nationality === 'non_national' ? country : null,
+  });
   document.getElementById('signin-form').reset();
-  // Reset state from radio defaults
+  // Reset visibility states
+  document.getElementById('si-country-row').classList.add('hidden');
+  document.getElementById('si-id-type-row').classList.add('hidden');
   document.querySelector('input[name="si-id-type"][value="national_id"]').checked = true;
   document.getElementById('si-prescription-fs').classList.add('hidden');
-  document.querySelector('#si-id-number').placeholder = 'e.g. 1234567890';
+  siUpdateIdLabel();
   go('queue');
 });
 
@@ -907,12 +1048,14 @@ function renderQueue() {
     lookupAnchor.onclick = (ev) => { ev.preventDefault(); go('lookup'); };
   }
 
+  const transferBox = document.getElementById('q-transfer-box');
   if (!entry) {
     greet.textContent = 'No active queue entry';
     box.innerHTML = `<section class="rounded-xl bg-slate-50 p-8 text-center"><p class="text-slate-600">Check in first to see your queue position.</p></section>`;
     ref.textContent = '—';
     visit.textContent = '—';
     if (summary) summary.textContent = '';
+    if (transferBox) transferBox.classList.add('hidden');
     return;
   }
 
@@ -928,14 +1071,24 @@ function renderQueue() {
   }
 
   const stream = streamFor(entry.visit_type);
-  const where = stream === 'pharmacy' ? 'the pharmacy window' : 'the desk';
+  const where = stream === 'pharmacy' ? 'the pharmacy window' : 'the General Clinic';
+
+  const ticketLine = entry.ticket_number != null
+    ? `<p class="text-sm font-semibold uppercase tracking-wide text-amber-700">Your ticket</p>
+       <p class="mt-1 text-5xl font-black text-amber-900">#${entry.ticket_number}</p>`
+    : '';
+  const ticketLineWaiting = entry.ticket_number != null
+    ? `<p class="text-sm font-semibold uppercase tracking-wide text-brand">Your ticket</p>
+       <p class="mt-1 text-5xl font-black text-brand-dark">#${entry.ticket_number}</p>`
+    : '';
 
   if (entry.status === 'called' || entry.status === 'preparing') {
     const label = entry.status === 'preparing' ? 'Pharmacist is preparing your order' : "You're being called";
     box.innerHTML = `
       <section class="rounded-xl bg-amber-100 p-8 text-center ring-4 ring-amber-400">
         <p class="text-sm font-semibold uppercase tracking-wide text-amber-700">${label}</p>
-        <h2 class="mt-3 text-3xl font-bold text-amber-900">Please go to ${where}</h2>
+        ${entry.ticket_number != null ? `<p class="mt-2 text-5xl font-black text-amber-900">#${entry.ticket_number}</p>` : ''}
+        <h2 class="mt-3 text-2xl font-bold text-amber-900">Please go to ${where}</h2>
       </section>`;
   } else if (entry.status === 'seen') {
     box.innerHTML = `
@@ -954,11 +1107,43 @@ function renderQueue() {
     const wait = ahead * 8;
     box.innerHTML = `
       <section class="rounded-xl bg-brand-light p-8 text-center">
-        <p class="text-sm font-semibold uppercase tracking-wide text-brand">Your queue position</p>
-        <p class="mt-2 text-7xl font-bold text-brand-dark">${position}</p>
+        ${ticketLineWaiting}
+        <p class="${entry.ticket_number != null ? 'mt-4 ' : ''}text-sm font-semibold uppercase tracking-wide text-brand">Your queue position</p>
+        <p class="mt-1 text-6xl font-bold text-brand-dark">${position}</p>
         <p class="mt-3 text-slate-700">${ahead === 0 ? "You're next." : `${ahead} ${ahead === 1 ? 'person' : 'people'} ahead of you`}</p>
         ${ahead > 0 ? `<p class="mt-1 text-sm text-slate-500">Estimated wait: about ${wait} minute${wait === 1 ? '' : 's'}</p>` : ''}
       </section>`;
+  }
+  void ticketLine;  // reserved for future use; intentionally unused right now
+
+  // Patient-initiated transfer (restored after May 27 stakeholder meeting).
+  if (transferBox) {
+    if (entry.status === 'seen') {
+      transferBox.classList.add('hidden');
+    } else {
+      transferBox.classList.remove('hidden');
+      const others = VISIT_TYPES.filter(v => v.value !== entry.visit_type);
+      document.getElementById('q-transfer-buttons').innerHTML = others.map(v =>
+        `<button type="button" data-vt="${v.value}" class="q-xfer rounded-lg border border-brand px-4 py-2 text-sm font-semibold text-brand hover:bg-brand-light">Move to ${v.label}</button>`
+      ).join('');
+      document.getElementById('q-prescription-prompt').classList.add('hidden');
+      document.querySelectorAll('.q-xfer').forEach(b => {
+        b.addEventListener('click', () => {
+          const vt = b.dataset.vt;
+          if (vt === 'pharmacy') {
+            document.getElementById('q-prescription-prompt').classList.remove('hidden');
+            document.querySelectorAll('.rx-pick').forEach(rxBtn => {
+              rxBtn.onclick = () => { transferEntry(entry.id, 'pharmacy', rxBtn.dataset.rx); };
+            });
+          } else {
+            transferEntry(entry.id, vt);
+          }
+        });
+      });
+      document.getElementById('rx-cancel').onclick = () => {
+        document.getElementById('q-prescription-prompt').classList.add('hidden');
+      };
+    }
   }
 }
 
@@ -1015,7 +1200,7 @@ function announcePatient(entry) {
   const voice = getFemaleVoice();
   if (!voice) return;
   const stream = streamFor(entry.visit_type);
-  const where = stream === 'pharmacy' ? 'the pharmacy window' : 'the front desk';
+  const where = stream === 'pharmacy' ? 'the pharmacy window' : 'the General Clinic';
   const ticket = entry.ticket_number ?? 0;
   // Audio uses the full name. On-screen display still uses the masked
   // form for privacy in the open waiting area.
@@ -1075,7 +1260,7 @@ function renderDisplay() {
   displayVisibleCalledIds = currentIds;
   document.getElementById('d-called').innerHTML = called.map(e => {
     const stream = streamFor(e.visit_type);
-    const where = stream === 'pharmacy' ? 'Please go to the pharmacy window' : 'Please go to the front desk';
+    const where = stream === 'pharmacy' ? 'Please go to the pharmacy window' : 'Please go to the General Clinic';
     return `
       <div class="flex-1 min-w-56 rounded-lg bg-amber-400 px-6 py-5 text-slate-950">
         <p class="text-sm font-bold uppercase tracking-widest">Now calling — ${streamLabel(stream)}</p>

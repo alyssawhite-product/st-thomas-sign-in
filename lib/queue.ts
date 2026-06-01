@@ -1,7 +1,7 @@
 import { getServerSupabase, getAnonServerSupabase } from "./supabase-server";
 import { generateToken } from "./token";
 import { streamFor } from "./types";
-import type { HasPrescription, QueueEntry, Stream } from "./types";
+import type { HasPrescription, Nationality, QueueEntry, Stream } from "./types";
 
 const AVG_MINUTES_PER_PATIENT = 8;
 const MAX_TOKEN_ATTEMPTS = 8;
@@ -129,6 +129,8 @@ export interface CreateEntryInput {
   idNumber: string;
   visitType: string;
   hasPrescription?: HasPrescription | null;
+  nationality?: Nationality | null;
+  countryOfOrigin?: string | null;
 }
 
 export async function createEntry({
@@ -137,6 +139,8 @@ export async function createEntry({
   idNumber,
   visitType,
   hasPrescription,
+  nationality,
+  countryOfOrigin,
 }: CreateEntryInput): Promise<QueueEntry> {
   const supabase = getServerSupabase();
 
@@ -166,6 +170,11 @@ export async function createEntry({
         ticket_number: ticketNumber,
         status: "waiting",
         has_prescription: visitType === "pharmacy" ? hasPrescription ?? null : null,
+        nationality: nationality ?? null,
+        // Country of origin is only meaningful for non-nationals; the DB
+        // check constraint enforces the pairing.
+        country_of_origin:
+          nationality === "non_national" ? countryOfOrigin ?? null : null,
       })
       .select("*")
       .single();

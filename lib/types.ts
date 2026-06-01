@@ -10,6 +10,8 @@ export type HasPrescription = "yes" | "no" | "electronic";
 
 export type StaffRole = "clinician" | "pharmacist" | "admin";
 
+export type Nationality = "national" | "non_national";
+
 export interface QueueEntry {
   id: string;
   token: string;
@@ -25,6 +27,8 @@ export interface QueueEntry {
   transferred_from: string | null;
   pharmacy_notes: string | null;
   has_prescription: HasPrescription | null;
+  nationality: Nationality | null;
+  country_of_origin: string | null;
   created_at: string;
   called_at: string | null;
   seen_at: string | null;
@@ -64,7 +68,7 @@ export const VISIT_TYPES: { value: VisitType; label: string; description: string
 export const VISIT_TYPE_VALUES = VISIT_TYPES.map((v) => v.value);
 
 export const STREAM_LABELS: Record<Stream, string> = {
-  clinical: "Doctor",
+  clinical: "General Clinic",
   pharmacy: "Pharmacy",
 };
 
@@ -77,3 +81,37 @@ export const PRESCRIPTION_OPTIONS: { value: HasPrescription; label: string; desc
   { value: "electronic", label: "Electronic prescription on file", description: "My doctor sent it to the pharmacy already." },
   { value: "no", label: "No prescription yet", description: "I'm here to ask about a medication or pick something up without a prescription." },
 ];
+
+// Country options for the Non-National sign-in branch. CARICOM members
+// first (geographically closest), then major non-CARICOM visitor sources
+// to Barbados, then a fallback. "Other" lets a patient proceed without
+// matching the list -- captured as free-text downstream.
+export const COUNTRY_OPTIONS: { value: string; label: string }[] = [
+  // CARICOM (excluding Barbados, which is the National branch)
+  { value: "AG", label: "Antigua and Barbuda" },
+  { value: "BS", label: "Bahamas" },
+  { value: "BZ", label: "Belize" },
+  { value: "DM", label: "Dominica" },
+  { value: "GD", label: "Grenada" },
+  { value: "GY", label: "Guyana" },
+  { value: "HT", label: "Haiti" },
+  { value: "JM", label: "Jamaica" },
+  { value: "MS", label: "Montserrat" },
+  { value: "KN", label: "Saint Kitts and Nevis" },
+  { value: "LC", label: "Saint Lucia" },
+  { value: "VC", label: "Saint Vincent and the Grenadines" },
+  { value: "SR", label: "Suriname" },
+  { value: "TT", label: "Trinidad and Tobago" },
+  // Top non-CARICOM visitor sources
+  { value: "GB", label: "United Kingdom" },
+  { value: "US", label: "United States" },
+  { value: "CA", label: "Canada" },
+  { value: "DE", label: "Germany" },
+  { value: "BR", label: "Brazil" },
+  { value: "CN", label: "China" },
+  { value: "IN", label: "India" },
+  // Fallback
+  { value: "OTHER", label: "Other" },
+];
+
+export const COUNTRY_VALUES = COUNTRY_OPTIONS.map((c) => c.value);
