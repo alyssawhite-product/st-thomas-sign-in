@@ -3,7 +3,43 @@
 import Link from "next/link";
 import { useEffect, useRef, useState, useTransition } from "react";
 import { signInAction } from "@/app/actions";
-import { COUNTRY_OPTIONS, PRESCRIPTION_OPTIONS, VISIT_TYPES } from "@/lib/types";
+import { COUNTRY_OPTIONS, PRESCRIPTION_OPTIONS } from "@/lib/types";
+
+// Top-level visit choices presented on the check-in form. "general_clinic"
+// is a UI grouping -- it collapses the underlying "general" and
+// "follow-up" visit_type values into a sub-choice (new consultation vs
+// follow-up) so patients aren't asked to know the difference between
+// "general" and "follow-up" up front.
+const TOP_LEVEL_VISITS = [
+  {
+    value: "general_clinic",
+    label: "General Clinic",
+    description: "Consultations, referrals, or new health concerns.",
+  },
+  {
+    value: "pharmacy",
+    label: "Pharmacy",
+    description: "To collect or enquire about a prescription or medication.",
+  },
+  {
+    value: "other",
+    label: "Other",
+    description: "For any visit not covered by the options above.",
+  },
+] as const;
+
+const CONSULTATION_TYPES = [
+  {
+    value: "general",
+    label: "New consultation",
+    description: "A first visit for a new health concern or referral.",
+  },
+  {
+    value: "follow-up",
+    label: "Follow-up",
+    description: "A return visit to check on a previous condition or treatment.",
+  },
+] as const;
 
 interface Props {
   kiosk?: boolean;
@@ -15,6 +51,7 @@ type FieldKey =
   | "country_of_origin"
   | "id_number"
   | "visit_type"
+  | "consultation_type"
   | "has_prescription";
 
 interface DuplicateError {
@@ -27,7 +64,8 @@ const FIELD_META: Record<FieldKey, { anchor: string; label: string }> = {
   nationality: { anchor: "nationality_national", label: "Nationality" },
   country_of_origin: { anchor: "country_of_origin", label: "Country of origin" },
   id_number: { anchor: "id_number", label: "Identification number" },
-  visit_type: { anchor: "visit_type_general", label: "Type of visit" },
+  visit_type: { anchor: "visit_type_general_clinic", label: "Type of visit" },
+  consultation_type: { anchor: "consultation_type_general", label: "Consultation type" },
   has_prescription: { anchor: "has_prescription_yes", label: "Prescription" },
 };
 
@@ -36,14 +74,16 @@ function validate({
   nationality,
   country,
   idNumber,
-  visitType,
+  topLevelVisit,
+  consultationType,
   hasPrescription,
 }: {
   name: string;
   nationality: string;
   country: string;
   idNumber: string;
-  visitType: string;
+  topLevelVisit: string;
+  consultationType: string;
   hasPrescription: string;
 }): Partial<Record<FieldKey, string>> {
   const errors: Partial<Record<FieldKey, string>> = {};
@@ -59,10 +99,16 @@ function validate({
   if (!idNumber.trim()) {
     errors.id_number = "Enter your ID number.";
   }
-  if (!visitType) {
+  if (!topLevelVisit) {
     errors.visit_type = "Choose a type of visit.";
   }
-  if (visitType === "pharmacy" && !hasPrescription) {
+  if (topLevelVisit === "general_clinic" && !consultationType) {
+    errors.consultation_type = "Choose new consultation or follow-up.";
+  }
+  // Pharmacy is the only top-level whose downstream visit_type is
+  // "pharmacy"; "other" and "general_clinic" sub-choices don't need a
+  // prescription question.
+  if (topLevelVisit === "pharmacy" && !hasPrescription) {
     errors.has_prescription = "Tell us about your prescription.";
   }
   return errors;
@@ -77,7 +123,11 @@ export function SignInForm({ kiosk }: Props) {
   const [idType, setIdType] = useState<"national_id" | "passport">("national_id");
   const [name, setName] = useState("");
   const [idNumber, setIdNumber] = useState("");
-  const [visitType, setVisitType] = useState<string>("");
+  // topLevelVisit is the UI grouping (general_clinic | pharmacy | other).
+  // consultationType is the sub-choice when General Clinic is picked. On
+  // submit we collapse these to the underlying visit_type column.
+  const [topLevelVisit, setTopLevelVisit] = useState<string>("");
+  const [consultationType, setConsultationType] = useState<string>("");
   const [hasPrescription, setHasPrescription] = useState<string>("");
   const [errors, setErrors] = useState<Partial<Record<FieldKey, string>>>({});
   const [duplicateError, setDuplicateError] = useState<DuplicateError | null>(null);
@@ -105,7 +155,8 @@ export function SignInForm({ kiosk }: Props) {
       nationality,
       country,
       idNumber,
-      visitType,
+      topLevelVisit,
+      consultationType,
       hasPrescription,
     });
     setErrors(fieldErrors);
@@ -121,14 +172,21 @@ export function SignInForm({ kiosk }: Props) {
     // pick between National ID and Passport.
     const effectiveIdType = nationality === "national" ? "national_id" : idType;
 
+    // Collapse the UI grouping to the underlying visit_type column.
+    // General Clinic forks on the consultation type sub-choice.
+    const effectiveVisitType =
+      topLevelVisit === "general_clinic"
+        ? consultationType  // "general" | "follow-up"
+        : topLevelVisit;     // "pharmacy" | "other"
+
     const fd = new FormData();
     fd.set("name", name.trim());
     fd.set("nationality", nationality);
     if (nationality === "non_national") fd.set("country_of_origin", country);
     fd.set("id_type", effectiveIdType);
     fd.set("id_number", idNumber.trim());
-    fd.set("visit_type", visitType);
-    if (visitType === "pharmacy") fd.set("has_prescription", hasPrescription);
+    fd.set("visit_type", effectiveVisitType);
+    if (effectiveVisitType === "pharmacy") fd.set("has_prescription", hasPrescription);
 
     startTransition(async () => {
       try {
@@ -156,6 +214,7 @@ export function SignInForm({ kiosk }: Props) {
           ID_NUMBER_REQUIRED: { field: "id_number", msg: "Enter your ID number." },
           ID_TYPE_INVALID: { field: "id_number", msg: "Choose a valid ID type." },
           VISIT_TYPE_INVALID: { field: "visit_type", msg: "Choose a type of visit." },
+          CONSULTATION_TYPE_REQUIRED: { field: "consultation_type", msg: "Choose new consultation or follow-up." },
           PRESCRIPTION_REQUIRED: { field: "has_prescription", msg: "Tell us about your prescription." },
         };
         if (message in codeMap) {
@@ -182,6 +241,7 @@ export function SignInForm({ kiosk }: Props) {
     "country_of_origin",
     "id_number",
     "visit_type",
+    "consultation_type",
     "has_prescription",
   ];
   const visibleErrors = orderedErrorKeys.filter((k) => errors[k]);
@@ -416,20 +476,23 @@ export function SignInForm({ kiosk }: Props) {
       <fieldset>
         <legend className="field-label">Type of visit</legend>
         <div className="mt-3 space-y-2">
-          {VISIT_TYPES.map((v, i) => (
+          {TOP_LEVEL_VISITS.map((v) => (
             <label
               key={v.value}
               className="flex cursor-pointer items-start gap-3 rounded-md border border-slate-300 px-4 py-3 text-base has-[:checked]:border-brand has-[:checked]:bg-brand-light"
             >
               <input
-                id={i === 0 ? "visit_type_general" : `visit_type_${v.value}`}
+                id={`visit_type_${v.value}`}
                 type="radio"
                 name="visit_type"
                 value={v.value}
-                checked={visitType === v.value}
+                checked={topLevelVisit === v.value}
                 onChange={() => {
-                  setVisitType(v.value);
+                  setTopLevelVisit(v.value);
+                  // Reset the sub-choice when changing top-level branches.
+                  if (v.value !== "general_clinic") setConsultationType("");
                   clearError("visit_type");
+                  clearError("consultation_type");
                 }}
                 className="mt-0.5 h-5 w-5 shrink-0 accent-brand"
               />
@@ -445,7 +508,41 @@ export function SignInForm({ kiosk }: Props) {
         )}
       </fieldset>
 
-      {visitType === "pharmacy" && (
+      {topLevelVisit === "general_clinic" && (
+        <fieldset>
+          <legend className="field-label">Is this a new consultation or a follow-up?</legend>
+          <div className="mt-3 space-y-2">
+            {CONSULTATION_TYPES.map((opt) => (
+              <label
+                key={opt.value}
+                className="flex cursor-pointer items-start gap-3 rounded-md border border-slate-300 px-4 py-3 text-base has-[:checked]:border-brand has-[:checked]:bg-brand-light"
+              >
+                <input
+                  id={`consultation_type_${opt.value}`}
+                  type="radio"
+                  name="consultation_type"
+                  value={opt.value}
+                  checked={consultationType === opt.value}
+                  onChange={() => {
+                    setConsultationType(opt.value);
+                    clearError("consultation_type");
+                  }}
+                  className="mt-0.5 h-5 w-5 shrink-0 accent-brand"
+                />
+                <span className="flex flex-col">
+                  <span className="font-medium">{opt.label}</span>
+                  <span className="text-sm text-slate-500">{opt.description}</span>
+                </span>
+              </label>
+            ))}
+          </div>
+          {errors.consultation_type && (
+            <p className="mt-2 text-sm font-medium text-red-700">{errors.consultation_type}</p>
+          )}
+        </fieldset>
+      )}
+
+      {topLevelVisit === "pharmacy" && (
         <fieldset>
           <legend className="field-label">Do you have a prescription?</legend>
           <div className="mt-3 space-y-2">
