@@ -15,9 +15,8 @@ function startOfTodayIso(): string {
 async function nextTicketNumber(stream: Stream): Promise<number> {
   const supabase = getServerSupabase();
   const since = startOfTodayIso();
+  const isPharmacy = stream === "pharmacy";
 
-  // Tickets are scoped per stream. Records, General Clinic, and Pharmacy
-  // each get their own daily 1..N sequence.
   let query = supabase
     .from("queue_entries")
     .select("ticket_number")
@@ -25,14 +24,9 @@ async function nextTicketNumber(stream: Stream): Promise<number> {
     .order("ticket_number", { ascending: false })
     .limit(1);
 
-  if (stream === "pharmacy") {
-    query = query.eq("visit_type", "pharmacy");
-  } else if (stream === "records") {
-    query = query.eq("visit_type", "records");
-  } else {
-    // Clinical = everything that isn't records or pharmacy.
-    query = query.neq("visit_type", "pharmacy").neq("visit_type", "records");
-  }
+  query = isPharmacy
+    ? query.eq("visit_type", "pharmacy")
+    : query.neq("visit_type", "pharmacy");
 
   const { data } = await query.maybeSingle();
   const last = (data?.ticket_number as number | null) ?? 0;
@@ -46,6 +40,9 @@ async function writeAudit(row: {
   action:
     | "sign_in"
     | "call"
+    | "at_records"
+    | "with_nurse"
+    | "with_doctor"
     | "preparing"
     | "seen"
     | "transfer"
@@ -296,6 +293,34 @@ export async function setPreparing(id: string, actor?: { id: string | null; labe
     action: "preparing",
   });
 }
+
+// General Clinic sub-stages. Each advances the patient one step through
+// the records -> nurse -> doctor flow.
+async function setClinicStage(
+  id: string,
+  status: "at_records" | "with_nurse" | "with_doctor",
+  actor?: { id: string | null; label: string | null },
+): Promise<void> {
+  const supabase = getServerSupabase();
+  const { error } = await supabase
+    .from("queue_entries")
+    .update({ status })
+    .eq("id", id);
+  if (error) throw error;
+  await writeAudit({
+    entry_id: id,
+    actor_id: actor?.id ?? null,
+    actor_label: actor?.label ?? null,
+    action: status,
+  });
+}
+
+export const setAtRecords = (id: string, actor?: { id: string | null; label: string | null }) =>
+  setClinicStage(id, "at_records", actor);
+export const setWithNurse = (id: string, actor?: { id: string | null; label: string | null }) =>
+  setClinicStage(id, "with_nurse", actor);
+export const setWithDoctor = (id: string, actor?: { id: string | null; label: string | null }) =>
+  setClinicStage(id, "with_doctor", actor);
 
 export async function markSeen(id: string, actor?: { id: string | null; label: string | null }): Promise<void> {
   const supabase = getServerSupabase();

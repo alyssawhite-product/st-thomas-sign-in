@@ -12,11 +12,6 @@ import { COUNTRY_OPTIONS, PRESCRIPTION_OPTIONS } from "@/lib/types";
 // "general" and "follow-up" up front.
 const TOP_LEVEL_VISITS = [
   {
-    value: "records",
-    label: "Records",
-    description: "Patient records desk -- usually the first stop on arrival.",
-  },
-  {
     value: "general_clinic",
     label: "General Clinic",
     description: "Consultations, referrals, or new health concerns.",

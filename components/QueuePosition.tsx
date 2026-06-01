@@ -124,28 +124,64 @@ export function QueuePosition({ initialEntry, initialAhead }: Props) {
     </div>
   );
 
-  if (state.status === "called" || state.status === "preparing") {
+  const inProgress =
+    state.status === "called" ||
+    state.status === "at_records" ||
+    state.status === "with_nurse" ||
+    state.status === "with_doctor" ||
+    state.status === "preparing";
+
+  if (inProgress) {
     const myStream = streamFor(state.visitType);
-    const wherePhrase =
-      myStream === "pharmacy" ? "the pharmacy window" :
-      myStream === "records" ? "Records" :
-      "the General Clinic";
+    // Headline + body copy adapt to the current sub-stage so the patient
+    // always knows where to go (or where they are).
+    let headline: string;
+    let bodyLine: string;
+    if (myStream === "pharmacy") {
+      if (state.status === "preparing") {
+        headline = "Pharmacist is preparing your order";
+        bodyLine = "Please wait near the pharmacy window";
+      } else {
+        headline = "You're being called";
+        bodyLine = "Please go to the pharmacy window";
+      }
+    } else {
+      switch (state.status) {
+        case "called":
+          headline = "You're being called";
+          bodyLine = "Please go to the Records desk";
+          break;
+        case "at_records":
+          headline = "You're at the Records desk";
+          bodyLine = "Wait here until you are called by the Nurse";
+          break;
+        case "with_nurse":
+          headline = "Please go to the Nurse";
+          bodyLine = "After the Nurse, you'll wait to see the Doctor";
+          break;
+        case "with_doctor":
+          headline = "Please go to the Doctor";
+          bodyLine = "";
+          break;
+        default:
+          headline = "You're being called";
+          bodyLine = "Please go to the Records desk";
+      }
+    }
     return (
       <>
         <section className="rounded-xl bg-amber-100 p-8 text-center ring-4 ring-amber-400">
           <p className="text-sm font-semibold uppercase tracking-wide text-amber-700">
-            {state.status === "preparing"
-              ? "Pharmacist is preparing your order"
-              : "You're being called"}
+            {headline}
           </p>
           {state.ticketNumber !== null && (
             <p className="mt-2 text-5xl font-black text-amber-900">
               #{state.ticketNumber}
             </p>
           )}
-          <h2 className="mt-3 text-2xl font-bold text-amber-900">
-            Please go to {wherePhrase}
-          </h2>
+          {bodyLine && (
+            <h2 className="mt-3 text-2xl font-bold text-amber-900">{bodyLine}</h2>
+          )}
         </section>
         {kioskBanner}
       </>

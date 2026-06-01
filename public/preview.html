@@ -206,7 +206,7 @@
       </div>
     </header>
     <div class="mx-10 mt-8 flex flex-wrap gap-4" id="d-called"></div>
-    <div class="grid grid-cols-1 gap-6 px-10 py-8 lg:grid-cols-3" id="d-columns"></div>
+    <div class="grid grid-cols-1 gap-6 px-10 py-8 lg:grid-cols-2" id="d-columns"></div>
     <footer class="px-10 py-6">
       <div data-powered-by="dark"></div>
     </footer>
@@ -431,7 +431,6 @@ const PRESCRIPTION_OPTIONS = [
 // the underlying "general" and "follow-up" visit_type values into a
 // sub-choice.
 const TOP_LEVEL_VISITS = [
-  { value: 'records', label: 'Records', description: 'Patient records desk -- usually the first stop on arrival.' },
   { value: 'general_clinic', label: 'General Clinic', description: 'Consultations, referrals, or new health concerns.' },
   { value: 'pharmacy', label: 'Pharmacy', description: 'To collect or enquire about a prescription or medication.' },
   { value: 'other', label: 'Other', description: 'For any visit not covered by the options above.' },
@@ -584,7 +583,7 @@ function seed() {
     ],
     currentToken: patientToken,  // "My queue" view defaults to this patient
     staff: null,
-    nextTicketByStream: { records: 1, clinical: 5, pharmacy: 4 },
+    nextTicketByStream: { clinical: 5, pharmacy: 4 },
   };
 }
 function reset() {
@@ -596,23 +595,27 @@ function reset() {
 let state = load();
 
 function streamFor(visitType) {
-  if (visitType === 'records') return 'records';
-  if (visitType === 'pharmacy') return 'pharmacy';
-  return 'clinical';
+  return visitType === 'pharmacy' ? 'pharmacy' : 'clinical';
 }
 function streamLabel(s) {
-  if (s === 'pharmacy') return 'Pharmacy';
-  if (s === 'records') return 'Records';
-  return 'General Clinic';
+  return s === 'pharmacy' ? 'Pharmacy' : 'General Clinic';
 }
 
-// Three patient-facing departments; the staff/patient transfer dropdowns
-// offer the other two from wherever the patient currently is.
+// Two patient-facing departments; transfer dropdowns offer the other one.
 const DEPARTMENTS = [
-  { stream: 'records', label: 'Records', defaultVisitType: 'records' },
   { stream: 'clinical', label: 'General Clinic', defaultVisitType: 'general' },
   { stream: 'pharmacy', label: 'Pharmacy', defaultVisitType: 'pharmacy', askPrescription: true },
 ];
+
+// All in-progress clinic sub-stages (called + the three between).
+const CLINIC_IN_PROGRESS = ['called', 'at_records', 'with_nurse', 'with_doctor'];
+
+function statusLabel(s) {
+  if (s === 'at_records') return 'at records';
+  if (s === 'with_nurse') return 'with nurse';
+  if (s === 'with_doctor') return 'with doctor';
+  return s;
+}
 function makeToken() {
   const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   let t = '';
@@ -665,7 +668,7 @@ function callEntry(id) {
   const entry = state.entries.find(e => e.id === id);
   if (!entry) return;
   state.entries.forEach(e => {
-    if (e.visit_type === entry.visit_type && e.id !== id && (e.status === 'called' || e.status === 'preparing')) {
+    if (e.visit_type === entry.visit_type && e.id !== id && CLINIC_IN_PROGRESS.includes(e.status)) {
       e.status = 'seen';
       e.seen_at = new Date().toISOString();
     }
@@ -731,7 +734,7 @@ function priorityInsert({ name, idNumber, visitType, reason }) {
 }
 function resetDay() {
   state.entries = [];
-  state.nextTicketByStream = { records: 1, clinical: 1, pharmacy: 1 };
+  state.nextTicketByStream = { clinical: 1, pharmacy: 1 };
   state.currentToken = null;
   save();
 }
@@ -1140,10 +1143,6 @@ function renderQueue() {
   }
 
   const stream = streamFor(entry.visit_type);
-  const where =
-    stream === 'pharmacy' ? 'the pharmacy window'
-    : stream === 'records' ? 'Records'
-    : 'the General Clinic';
 
   const ticketLine = entry.ticket_number != null
     ? `<p class="text-sm font-semibold uppercase tracking-wide text-amber-700">Your ticket</p>
@@ -1154,13 +1153,30 @@ function renderQueue() {
        <p class="mt-1 text-5xl font-black text-brand-dark">#${entry.ticket_number}</p>`
     : '';
 
-  if (entry.status === 'called' || entry.status === 'preparing') {
-    const label = entry.status === 'preparing' ? 'Pharmacist is preparing your order' : "You're being called";
+  const inProgress = ['called', 'at_records', 'with_nurse', 'with_doctor', 'preparing'].includes(entry.status);
+  if (inProgress) {
+    // Headline + body adapt to the current sub-stage.
+    let headline, bodyLine;
+    if (stream === 'pharmacy') {
+      if (entry.status === 'preparing') {
+        headline = 'Pharmacist is preparing your order';
+        bodyLine = 'Please wait near the pharmacy window';
+      } else {
+        headline = "You're being called";
+        bodyLine = 'Please go to the pharmacy window';
+      }
+    } else {
+      if (entry.status === 'called') { headline = "You're being called"; bodyLine = 'Please go to the Records desk'; }
+      else if (entry.status === 'at_records') { headline = "You're at the Records desk"; bodyLine = 'Wait here until you are called by the Nurse'; }
+      else if (entry.status === 'with_nurse') { headline = 'Please go to the Nurse'; bodyLine = "After the Nurse, you'll wait to see the Doctor"; }
+      else if (entry.status === 'with_doctor') { headline = 'Please go to the Doctor'; bodyLine = ''; }
+      else { headline = "You're being called"; bodyLine = 'Please go to the Records desk'; }
+    }
     box.innerHTML = `
       <section class="rounded-xl bg-amber-100 p-8 text-center ring-4 ring-amber-400">
-        <p class="text-sm font-semibold uppercase tracking-wide text-amber-700">${label}</p>
+        <p class="text-sm font-semibold uppercase tracking-wide text-amber-700">${headline}</p>
         ${entry.ticket_number != null ? `<p class="mt-2 text-5xl font-black text-amber-900">#${entry.ticket_number}</p>` : ''}
-        <h2 class="mt-3 text-2xl font-bold text-amber-900">Please go to ${where}</h2>
+        ${bodyLine ? `<h2 class="mt-3 text-2xl font-bold text-amber-900">${bodyLine}</h2>` : ''}
       </section>`;
   } else if (entry.status === 'seen') {
     box.innerHTML = `
@@ -1274,10 +1290,10 @@ function announcePatient(entry) {
   const voice = getFemaleVoice();
   if (!voice) return;
   const stream = streamFor(entry.visit_type);
-  const where =
-    stream === 'pharmacy' ? 'the pharmacy window'
-    : stream === 'records' ? 'Records'
-    : 'the General Clinic';
+  // Audio only fires when a patient is newly called (not on sub-stage
+  // transitions), so the destination is always Records (clinic) or the
+  // pharmacy window.
+  const where = stream === 'pharmacy' ? 'the pharmacy window' : 'the Records desk';
   const ticket = entry.ticket_number ?? 0;
   // Audio uses the full name. On-screen display still uses the masked
   // form for privacy in the open waiting area.
@@ -1337,10 +1353,9 @@ function renderDisplay() {
   displayVisibleCalledIds = currentIds;
   document.getElementById('d-called').innerHTML = called.map(e => {
     const stream = streamFor(e.visit_type);
-    const where =
-      stream === 'pharmacy' ? 'Please go to the pharmacy window'
-      : stream === 'records' ? 'Please go to Records'
-      : 'Please go to the General Clinic';
+    const where = stream === 'pharmacy'
+      ? 'Please go to the pharmacy window'
+      : 'Please go to the Records desk';
     return `
       <div class="flex-1 min-w-56 rounded-lg bg-amber-400 px-6 py-5 text-slate-950">
         <p class="text-sm font-bold uppercase tracking-widest">Now calling — ${streamLabel(stream)}</p>
@@ -1351,7 +1366,7 @@ function renderDisplay() {
   }).join('');
 
   // Two stream columns. Priority entries hidden.
-  const streams = ['records', 'clinical', 'pharmacy'];
+  const streams = ['clinical', 'pharmacy'];
   document.getElementById('d-columns').innerHTML = streams.map(s => {
     const waiting = state.entries
       .filter(e => e.status === 'waiting' && streamFor(e.visit_type) === s && !e.priority)
@@ -1399,10 +1414,10 @@ function renderStaff() {
   document.getElementById('staff-whoami').textContent = `Signed in as ${state.staff.email} (${state.staff.role})`;
   // Clinic dashboard is scoped to the clinical stream only. Pharmacy
   // entries are handled exclusively on /pharmacy.
-  const clinicalEntries = state.entries.filter(e => streamFor(e.visit_type) !== 'pharmacy');
+  const clinicalEntries = state.entries.filter(e => streamFor(e.visit_type) === 'clinical');
   const stats = {
     waiting: clinicalEntries.filter(e => e.status === 'waiting').length,
-    called: clinicalEntries.filter(e => e.status === 'called' || e.status === 'preparing').length,
+    called: clinicalEntries.filter(e => CLINIC_IN_PROGRESS.includes(e.status)).length,
     seen: clinicalEntries.filter(e => e.status === 'seen').length,
   };
   document.getElementById('staff-stats').innerHTML = `
@@ -1428,7 +1443,7 @@ function renderStaff() {
 
   const byTab = {
     waiting: clinicalEntries.filter(e => e.status === 'waiting').sort(sortQueueOrder),
-    called: clinicalEntries.filter(e => e.status === 'called' || e.status === 'preparing').sort(sortQueueOrder),
+    called: clinicalEntries.filter(e => CLINIC_IN_PROGRESS.includes(e.status)).sort(sortQueueOrder),
     seen: clinicalEntries.filter(e => e.status === 'seen').sort((a,b) => new Date(b.seen_at||0) - new Date(a.seen_at||0)),
   };
   const list = byTab[staffActiveTab];
@@ -1457,25 +1472,34 @@ function statCard(label, value) {
 }
 function staffRow(e) {
   const stream = streamFor(e.visit_type);
-  const wasCalled = e.status === 'called' || e.status === 'preparing';
+  const wasCalled = CLINIC_IN_PROGRESS.includes(e.status);
   const statusBadge = {
     waiting: 'bg-slate-100 text-slate-700',
     called: 'bg-amber-100 text-amber-800',
+    at_records: 'bg-amber-100 text-amber-800',
+    with_nurse: 'bg-blue-100 text-blue-800',
+    with_doctor: 'bg-indigo-100 text-indigo-800',
     preparing: 'bg-blue-100 text-blue-800',
     seen: 'bg-emerald-100 text-emerald-800',
   }[e.status];
-  // Single action button when waiting. After Call: Mark seen + Move to
-  // dropdown offering the two other departments.
+  // Single-action progression through Call -> Mark at records -> Send to
+  // nurse -> Send to doctor -> Mark seen. Plus Move to (pharmacy) at any
+  // in-progress stage.
+  let primary = '';
+  if (e.status === 'waiting') primary = `<button data-act="call" data-id="${e.id}" class="btn-primary">Call</button>`;
+  else if (e.status === 'called') primary = `<button data-act="at-records" data-id="${e.id}" class="btn-primary">Mark at records</button>`;
+  else if (e.status === 'at_records') primary = `<button data-act="with-nurse" data-id="${e.id}" class="btn-primary">Send to nurse</button>`;
+  else if (e.status === 'with_nurse') primary = `<button data-act="with-doctor" data-id="${e.id}" class="btn-primary">Send to doctor</button>`;
+  else if (e.status === 'with_doctor') primary = `<button data-act="seen" data-id="${e.id}" class="btn-primary">Mark seen</button>`;
   const moveOptions = DEPARTMENTS.filter(d => d.stream !== stream)
     .map(d => `<button data-act="move" data-id="${e.id}" data-vt="${d.defaultVisitType}" class="block w-full px-3 py-2 text-left text-sm hover:bg-slate-100">${d.label}</button>`)
     .join('');
-  const actions = !wasCalled
-    ? `<button data-act="call" data-id="${e.id}" class="btn-primary">Call</button>`
-    : `<button data-act="seen" data-id="${e.id}" class="btn-primary">Mark seen</button>
-       <div class="relative">
-         <button data-act="movetoggle" data-id="${e.id}" class="btn-secondary">Move to…</button>
-         <div data-move-menu="${e.id}" class="absolute right-0 z-10 mt-1 w-44 rounded-md border border-slate-200 bg-white shadow-lg hidden">${moveOptions}</div>
-       </div>`;
+  const moveBlock = wasCalled ? `
+    <div class="relative">
+      <button data-act="movetoggle" data-id="${e.id}" class="btn-secondary">Move to…</button>
+      <div data-move-menu="${e.id}" class="absolute right-0 z-10 mt-1 w-44 rounded-md border border-slate-200 bg-white shadow-lg hidden">${moveOptions}</div>
+    </div>` : '';
+  const actions = `${primary}${moveBlock}`;
   return `
     <li class="grid grid-cols-1 gap-3 p-4 sm:grid-cols-[3.5rem_1fr_auto] sm:items-center ${e.priority ? 'border-l-4 border-red-500 bg-red-50/40' : ''}">
       <div class="flex flex-col items-start">
@@ -1485,7 +1509,7 @@ function staffRow(e) {
       <div>
         <div class="flex flex-wrap items-center gap-2">
           <span class="text-lg font-semibold">${escapeHtml(e.name)}</span>
-          <span class="rounded-full px-2 py-0.5 text-xs font-semibold uppercase ${statusBadge}">${e.status}</span>
+          <span class="rounded-full px-2 py-0.5 text-xs font-semibold uppercase ${statusBadge}">${statusLabel(e.status)}</span>
           ${e.priority ? `<span class="rounded-full bg-red-600 px-2 py-0.5 text-xs font-bold uppercase text-white">Priority</span>` : ''}
           ${e.transferred_from ? `<span class="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-medium text-slate-700">← ${e.transferred_from}</span>` : ''}
         </div>
@@ -1497,12 +1521,21 @@ function staffRow(e) {
       <div class="flex flex-wrap gap-2 sm:justify-end">${actions}</div>
     </li>`;
 }
+function setClinicStage(id, status) {
+  const entry = state.entries.find(e => e.id === id);
+  if (!entry) return;
+  entry.status = status;
+  save();
+}
 function wireStaffRowButtons() {
   document.querySelectorAll('#staff-tab-content [data-act]').forEach(btn => {
     btn.addEventListener('click', () => {
       const id = btn.dataset.id;
       const act = btn.dataset.act;
       if (act === 'call') callEntry(id);
+      else if (act === 'at-records') setClinicStage(id, 'at_records');
+      else if (act === 'with-nurse') setClinicStage(id, 'with_nurse');
+      else if (act === 'with-doctor') setClinicStage(id, 'with_doctor');
       else if (act === 'seen') markSeen(id);
       else if (act === 'movetoggle') {
         const menu = document.querySelector(`[data-move-menu="${id}"]`);

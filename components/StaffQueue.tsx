@@ -10,6 +10,9 @@ import {
   markSeenAction,
   priorityInsertAction,
   resetDayAction,
+  setAtRecordsAction,
+  setWithDoctorAction,
+  setWithNurseAction,
   staffLogoutAction,
   staffTransferAction,
 } from "@/app/actions";
@@ -30,10 +33,31 @@ function statusBadge(status: QueueEntry["status"]) {
   switch (status) {
     case "waiting": return "bg-slate-100 text-slate-700";
     case "called": return "bg-amber-100 text-amber-800";
+    case "at_records": return "bg-amber-100 text-amber-800";
+    case "with_nurse": return "bg-blue-100 text-blue-800";
+    case "with_doctor": return "bg-indigo-100 text-indigo-800";
     case "preparing": return "bg-blue-100 text-blue-800";
     case "seen": return "bg-emerald-100 text-emerald-800";
   }
 }
+
+// Human-readable sub-stage label for the row badge.
+function statusLabel(status: QueueEntry["status"]): string {
+  switch (status) {
+    case "at_records": return "at records";
+    case "with_nurse": return "with nurse";
+    case "with_doctor": return "with doctor";
+    default: return status;
+  }
+}
+
+// All in-progress clinic statuses (called + the three sub-stages).
+const CLINIC_IN_PROGRESS: QueueEntry["status"][] = [
+  "called",
+  "at_records",
+  "with_nurse",
+  "with_doctor",
+];
 
 function sortQueueOrder(a: QueueEntry, b: QueueEntry) {
   if (a.priority !== b.priority) return a.priority ? -1 : 1;
@@ -75,25 +99,26 @@ export function StaffQueue({ initialEntries, role, email }: Props) {
     return () => { void supabase.removeChannel(channel); };
   }, []);
 
-  // Clinic dashboard handles non-pharmacy patients: General Clinic +
-  // Records (until a dedicated Records portal exists). Pharmacy entries
-  // are managed on /pharmacy.
+  // Clinic dashboard handles General Clinic patients only. Pharmacy
+  // entries are managed exclusively on /pharmacy.
   const clinicalEntries = useMemo(
-    () => entries.filter((e) => streamFor(e.visit_type) !== "pharmacy"),
+    () => entries.filter((e) => streamFor(e.visit_type) === "clinical"),
     [entries],
   );
 
-  // Stats: Waiting / Called / Seen. Called includes preparing for the count.
+  // Stats: Waiting / Called / Seen. The "Called" bucket spans every
+  // in-progress sub-stage (called, at_records, with_nurse, with_doctor).
+  const isInProgress = (e: QueueEntry) => CLINIC_IN_PROGRESS.includes(e.status);
   const stats = useMemo(() => ({
     waiting: clinicalEntries.filter((e) => e.status === "waiting").length,
-    called: clinicalEntries.filter((e) => e.status === "called" || e.status === "preparing").length,
+    called: clinicalEntries.filter(isInProgress).length,
     seen: clinicalEntries.filter((e) => e.status === "seen").length,
   }), [clinicalEntries]);
 
   // Tab partitions
   const byTab: Record<Tab, QueueEntry[]> = useMemo(() => ({
     waiting: clinicalEntries.filter((e) => e.status === "waiting").sort(sortQueueOrder),
-    called: clinicalEntries.filter((e) => e.status === "called" || e.status === "preparing").sort(sortQueueOrder),
+    called: clinicalEntries.filter(isInProgress).sort(sortQueueOrder),
     seen: clinicalEntries.filter((e) => e.status === "seen")
       .sort((a, b) => new Date(b.seen_at ?? 0).getTime() - new Date(a.seen_at ?? 0).getTime()),
   }), [clinicalEntries]);
@@ -204,7 +229,7 @@ export function StaffQueue({ initialEntries, role, email }: Props) {
           <ul className="divide-y divide-slate-200 rounded-lg border border-slate-200">
             {byTab[activeTab].map((e) => {
               const stream = streamFor(e.visit_type);
-              const wasCalled = e.status === "called" || e.status === "preparing";
+              const wasCalled = CLINIC_IN_PROGRESS.includes(e.status) || e.status === "preparing";
               return (
                 <li
                   key={e.id}
@@ -226,7 +251,7 @@ export function StaffQueue({ initialEntries, role, email }: Props) {
                       <span
                         className={`rounded-full px-2 py-0.5 text-xs font-semibold uppercase ${statusBadge(e.status)}`}
                       >
-                        {e.status}
+                        {statusLabel(e.status)}
                       </span>
                       {e.priority && (
                         <span className="rounded-full bg-red-600 px-2 py-0.5 text-xs font-bold uppercase text-white">
@@ -252,8 +277,10 @@ export function StaffQueue({ initialEntries, role, email }: Props) {
                     )}
                   </div>
                   <div className="flex flex-wrap gap-2 sm:justify-end">
-                    {/* Single action button at a time. */}
-                    {!wasCalled ? (
+                    {/* Single-action progression through the General Clinic
+                        sub-stages: Call -> Mark at records -> Send to nurse
+                        -> Send to doctor -> Mark seen. */}
+                    {e.status === "waiting" && (
                       <button
                         type="button"
                         className="btn-primary"
@@ -262,45 +289,76 @@ export function StaffQueue({ initialEntries, role, email }: Props) {
                       >
                         Call
                       </button>
-                    ) : (
-                      <>
+                    )}
+                    {e.status === "called" && (
+                      <button
+                        type="button"
+                        className="btn-primary"
+                        disabled={pending}
+                        onClick={() => submitAction(setAtRecordsAction, e.id)}
+                      >
+                        Mark at records
+                      </button>
+                    )}
+                    {e.status === "at_records" && (
+                      <button
+                        type="button"
+                        className="btn-primary"
+                        disabled={pending}
+                        onClick={() => submitAction(setWithNurseAction, e.id)}
+                      >
+                        Send to nurse
+                      </button>
+                    )}
+                    {e.status === "with_nurse" && (
+                      <button
+                        type="button"
+                        className="btn-primary"
+                        disabled={pending}
+                        onClick={() => submitAction(setWithDoctorAction, e.id)}
+                      >
+                        Send to doctor
+                      </button>
+                    )}
+                    {e.status === "with_doctor" && (
+                      <button
+                        type="button"
+                        className="btn-primary"
+                        disabled={pending}
+                        onClick={() => submitAction(markSeenAction, e.id)}
+                      >
+                        Mark seen
+                      </button>
+                    )}
+                    {/* Patient can be transferred to pharmacy at any
+                        in-progress stage. */}
+                    {wasCalled && (
+                      <div className="relative">
                         <button
                           type="button"
-                          className="btn-primary"
+                          className="btn-secondary"
                           disabled={pending}
-                          onClick={() => submitAction(markSeenAction, e.id)}
+                          onClick={() =>
+                            setOpenMoveFor((curr) => (curr === e.id ? null : e.id))
+                          }
                         >
-                          Mark seen
+                          Move to…
                         </button>
-                        {/* Patient can move on to either of the other two
-                            departments (Records / General Clinic / Pharmacy). */}
-                        <div className="relative">
-                          <button
-                            type="button"
-                            className="btn-secondary"
-                            disabled={pending}
-                            onClick={() =>
-                              setOpenMoveFor((curr) => (curr === e.id ? null : e.id))
-                            }
-                          >
-                            Move to…
-                          </button>
-                          {openMoveFor === e.id && (
-                            <div className="absolute right-0 z-10 mt-1 w-44 rounded-md border border-slate-200 bg-white shadow-lg">
-                              {DEPARTMENTS.filter((d) => d.stream !== stream).map((d) => (
-                                <button
-                                  key={d.stream}
-                                  type="button"
-                                  className="block w-full px-3 py-2 text-left text-sm hover:bg-slate-100"
-                                  onClick={() => handleMove(e.id, d.defaultVisitType)}
-                                >
-                                  {d.label}
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      </>
+                        {openMoveFor === e.id && (
+                          <div className="absolute right-0 z-10 mt-1 w-44 rounded-md border border-slate-200 bg-white shadow-lg">
+                            {DEPARTMENTS.filter((d) => d.stream !== stream).map((d) => (
+                              <button
+                                key={d.stream}
+                                type="button"
+                                className="block w-full px-3 py-2 text-left text-sm hover:bg-slate-100"
+                                onClick={() => handleMove(e.id, d.defaultVisitType)}
+                              >
+                                {d.label}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
                 </li>

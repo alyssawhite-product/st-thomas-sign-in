@@ -42,10 +42,9 @@ function announcePatient(entry: QueueEntry) {
   const voice = getFemaleVoice();
   if (!voice) return;
   const stream = streamFor(entry.visit_type);
-  const where =
-    stream === "pharmacy" ? "the pharmacy window" :
-    stream === "records" ? "Records" :
-    "the General Clinic";
+  // For General Clinic, "called" means head to the Records desk (the
+  // first sub-stage of the clinic flow).
+  const where = stream === "pharmacy" ? "the pharmacy window" : "the Records desk";
   const ticket = entry.ticket_number ?? 0;
   const msg = new SpeechSynthesisUtterance(
     `Number ${ticket}, ${maskedDisplayName(entry.name)}. Please go to ${where}.`,
@@ -173,7 +172,7 @@ export function QueueDisplay({ initialEntries }: Props) {
         (a, b) =>
           new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
       );
-    const streams: Stream[] = ["records", "clinical", "pharmacy"];
+    const streams: Stream[] = ["clinical", "pharmacy"];
     return {
       calledNow: topCalled(entries),
       columns: streams.map((s) => ({
@@ -231,9 +230,7 @@ export function QueueDisplay({ initialEntries }: Props) {
                 <div className="mt-0.5 text-sm">
                   {stream === "pharmacy"
                     ? "Please go to the pharmacy window"
-                    : stream === "records"
-                    ? "Please go to Records"
-                    : "Please go to the General Clinic"}
+                    : "Please go to the Records desk"}
                 </div>
               </div>
             );
@@ -241,7 +238,7 @@ export function QueueDisplay({ initialEntries }: Props) {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-6 px-10 py-8 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-6 px-10 py-8 lg:grid-cols-2">
         {columns.map((col) => (
           <section key={col.stream}>
             <h2 className="mb-3 rounded-md bg-slate-800 px-4 py-2 text-center text-2xl font-semibold tracking-wide text-slate-100">

@@ -11,8 +11,11 @@ import {
   markSeen,
   priorityInsert,
   resetToday,
+  setAtRecords,
   setPharmacyNote,
   setPreparing,
+  setWithDoctor,
+  setWithNurse,
   transferEntry,
 } from "@/lib/queue";
 import { createSSRClient, getStaffSession, requireRole } from "@/lib/auth-server";
@@ -158,6 +161,32 @@ export async function setPreparingAction(formData: FormData): Promise<void> {
   if (!id) throw new Error("Missing id");
   await setPreparing(id, actorFromSession(session));
   revalidatePath("/pharmacy");
+}
+
+// General Clinic sub-stage advances. Each is callable by clinicians or
+// admins from the clinic dashboard.
+export async function setAtRecordsAction(formData: FormData): Promise<void> {
+  const session = await requireStaffRole(["clinician", "admin"]);
+  const id = String(formData.get("id") ?? "");
+  if (!id) throw new Error("Missing id");
+  await setAtRecords(id, actorFromSession(session));
+  revalidatePath("/staff");
+}
+
+export async function setWithNurseAction(formData: FormData): Promise<void> {
+  const session = await requireStaffRole(["clinician", "admin"]);
+  const id = String(formData.get("id") ?? "");
+  if (!id) throw new Error("Missing id");
+  await setWithNurse(id, actorFromSession(session));
+  revalidatePath("/staff");
+}
+
+export async function setWithDoctorAction(formData: FormData): Promise<void> {
+  const session = await requireStaffRole(["clinician", "admin"]);
+  const id = String(formData.get("id") ?? "");
+  if (!id) throw new Error("Missing id");
+  await setWithDoctor(id, actorFromSession(session));
+  revalidatePath("/staff");
 }
 
 export async function savePharmacyNoteAction(formData: FormData): Promise<void> {
