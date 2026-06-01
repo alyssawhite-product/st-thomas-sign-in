@@ -42,19 +42,25 @@ function announcePatient(entry: QueueEntry) {
   const voice = getFemaleVoice();
   if (!voice) return;
   const stream = streamFor(entry.visit_type);
-  // For General Clinic, "called" means head to the Records desk (the
-  // first sub-stage of the clinic flow).
-  const where = stream === "pharmacy" ? "the pharmacy window" : "the Records desk";
+  // Destination phrase depends on the current sub-stage. The initial
+  // call sends the patient to Records (clinic) or the pharmacy window;
+  // sub-stage transitions announce the next station.
+  let where: string;
+  if (stream === "pharmacy") {
+    where = "the pharmacy window";
+  } else if (entry.status === "with_nurse") {
+    where = "the Nurse";
+  } else if (entry.status === "with_doctor") {
+    where = "the Doctor";
+  } else {
+    where = "the Records desk";
+  }
   const ticket = entry.ticket_number ?? 0;
   const msg = new SpeechSynthesisUtterance(
     `Number ${ticket}, ${maskedDisplayName(entry.name)}. Please go to ${where}.`,
   );
   msg.voice = voice;
   window.speechSynthesis.speak(msg);
-}
-
-function waitMinutes(iso: string, now: number): number {
-  return Math.max(0, Math.floor((now - new Date(iso).getTime()) / 60000));
 }
 
 function formatDate(now: number): string {
@@ -73,6 +79,14 @@ function formatClock(now: number): string {
     hour12: false,
   });
 }
+
+// Statuses that trigger an audio announcement on the public display.
+// Each transition fires once (tracked by (id, status) pair).
+const DISPLAY_ANNOUNCEABLE_STATUSES: QueueEntry["status"][] = [
+  "called",
+  "with_nurse",
+  "with_doctor",
+];
 
 // Top 3 currently called or preparing, freshest first. Priority entries are
 // hidden from the public display per spec.
@@ -95,6 +109,17 @@ export function QueueDisplay({ initialEntries }: Props) {
 
   const visibleCalledIdsRef = useRef<Set<string>>(
     new Set(topCalled(initialEntries).map((e) => e.id)),
+  );
+
+  // Track which (id, status) pairs we've already announced so a patient
+  // gets one audio cue per sub-stage transition, not on every refresh.
+  // Seeded from initial entries so we don't replay everything on mount.
+  const announcedKeysRef = useRef<Set<string>>(
+    new Set(
+      initialEntries
+        .filter((e) => DISPLAY_ANNOUNCEABLE_STATUSES.includes(e.status))
+        .map((e) => `${e.id}:${e.status}`),
+    ),
   );
 
   function unlockAudio() {
@@ -130,19 +155,30 @@ export function QueueDisplay({ initialEntries }: Props) {
       const fresh = (data ?? []) as QueueEntry[];
 
       const visible = topCalled(fresh);
-      const newlyVisible = visible.filter(
-        (e) => !visibleCalledIdsRef.current.has(e.id),
-      );
 
-      if (newlyVisible.length > 0 && audioCtxRef.current) {
+      // Announce on any new (id, status) pair for an announceable status.
+      // This covers the initial call AND each sub-stage transition
+      // (with_nurse, with_doctor).
+      const newAnnouncements = fresh.filter((e) => {
+        if (!DISPLAY_ANNOUNCEABLE_STATUSES.includes(e.status)) return false;
+        return !announcedKeysRef.current.has(`${e.id}:${e.status}`);
+      });
+
+      if (newAnnouncements.length > 0 && audioCtxRef.current) {
         playChime(audioCtxRef.current);
         // Call the name twice with a gap, so a patient who missed the
         // first announcement still hears the second.
-        setTimeout(() => newlyVisible.forEach((e) => announcePatient(e)), 1100);
-        setTimeout(() => newlyVisible.forEach((e) => announcePatient(e)), 5500);
+        setTimeout(() => newAnnouncements.forEach((e) => announcePatient(e)), 1100);
+        setTimeout(() => newAnnouncements.forEach((e) => announcePatient(e)), 5500);
       }
 
+      // Update both refs.
       visibleCalledIdsRef.current = new Set(visible.map((e) => e.id));
+      for (const e of fresh) {
+        if (DISPLAY_ANNOUNCEABLE_STATUSES.includes(e.status)) {
+          announcedKeysRef.current.add(`${e.id}:${e.status}`);
+        }
+      }
       setEntries(fresh);
     }
 
@@ -260,9 +296,6 @@ export function QueueDisplay({ initialEntries }: Props) {
                   >
                     <span className="text-3xl font-black text-brand">
                       #{e.ticket_number ?? "—"}
-                    </span>
-                    <span className="text-xs text-slate-500">
-                      {waitMinutes(e.created_at, now)} min waiting
                     </span>
                   </li>
                 ))}

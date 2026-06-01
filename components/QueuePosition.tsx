@@ -10,6 +10,43 @@ import { patientTransferAction } from "@/app/actions";
 const AVG_MINUTES_PER_PATIENT = 8;
 const KIOSK_TIMEOUT_SECONDS = 10;
 
+// Sub-stage transitions that should give the patient a chime + buzz on
+// their phone. No TTS on the phone -- audio announcements are reserved
+// for the public display.
+const NOTIFY_STATUSES: QueueStatus[] = ["called", "with_nurse", "with_doctor", "preparing"];
+
+function playPatientChime() {
+  try {
+    const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    const notes = [523.25, 659.25, 783.99]; // C5 E5 G5
+    notes.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = "sine";
+      osc.frequency.value = freq;
+      const start = ctx.currentTime + i * 0.18;
+      gain.gain.setValueAtTime(0, start);
+      gain.gain.linearRampToValueAtTime(0.35, start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.6);
+      osc.start(start);
+      osc.stop(start + 0.65);
+    });
+  } catch {
+    // Audio may be blocked until the user interacts. Vibration usually
+    // still works -- swallow the error and rely on the buzz.
+  }
+}
+
+function buzzPhone() {
+  if (typeof navigator !== "undefined" && typeof navigator.vibrate === "function") {
+    navigator.vibrate([200, 100, 200, 100, 400]);
+  }
+}
+
 interface Props {
   initialEntry: QueueEntry;
   initialAhead: number;
@@ -33,6 +70,25 @@ export function QueuePosition({ initialEntry, initialAhead }: Props) {
     createdAt: initialEntry.created_at,
   });
   const [kioskSecondsLeft, setKioskSecondsLeft] = useState<number | null>(null);
+  // Track the last status we notified on so the chime + buzz fires once
+  // per transition, not every render.
+  const lastNotifiedStatusRef = useRef<QueueStatus | null>(
+    NOTIFY_STATUSES.includes(initialEntry.status) ? initialEntry.status : null,
+  );
+
+  useEffect(() => {
+    if (
+      NOTIFY_STATUSES.includes(state.status) &&
+      lastNotifiedStatusRef.current !== state.status
+    ) {
+      playPatientChime();
+      buzzPhone();
+    }
+    lastNotifiedStatusRef.current = NOTIFY_STATUSES.includes(state.status)
+      ? state.status
+      : lastNotifiedStatusRef.current;
+  }, [state.status]);
+
   const kioskTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {

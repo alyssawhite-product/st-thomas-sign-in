@@ -1104,6 +1104,16 @@ function currentEntry() {
 }
 function renderQueue() {
   const entry = currentEntry();
+  // Patient-phone notification: chime + vibrate on transitions to a
+  // notify-worthy status. Fires once per (token, status) pair.
+  if (entry && PATIENT_NOTIFY.includes(entry.status)) {
+    const key = `${entry.token}:${entry.status}`;
+    if (!patientNotifiedKeys.has(key)) {
+      patientNotifiedKeys.add(key);
+      playPatientChime();
+      buzzPhone();
+    }
+  }
   const greet = document.getElementById('q-greeting');
   const box = document.getElementById('q-status-box');
   const ref = document.getElementById('q-ref');
@@ -1259,6 +1269,42 @@ setInterval(updateDisplayClock, 30_000);
 let displayAudioCtx = null;
 let displayAudioUnlocked = false;
 let displayVisibleCalledIds = new Set();
+// Track which (id, status) pairs we've already announced so the chime +
+// TTS fires once per transition, not on every render.
+const DISPLAY_ANNOUNCEABLE = ['called', 'with_nurse', 'with_doctor'];
+let displayAnnouncedKeys = new Set();
+
+// Patient-phone notifications: chime + vibrate (no TTS). Tracks which
+// (token, status) we've already buzzed for so each transition fires once.
+const PATIENT_NOTIFY = ['called', 'with_nurse', 'with_doctor', 'preparing'];
+const patientNotifiedKeys = new Set();
+function playPatientChime() {
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    [523.25, 659.25, 783.99].forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.type = 'sine';
+      osc.frequency.value = freq;
+      const start = ctx.currentTime + i * 0.18;
+      gain.gain.setValueAtTime(0, start);
+      gain.gain.linearRampToValueAtTime(0.35, start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.6);
+      osc.start(start);
+      osc.stop(start + 0.65);
+    });
+  } catch (e) {
+    // Swallow -- vibration usually still fires.
+  }
+}
+function buzzPhone() {
+  if (typeof navigator !== 'undefined' && typeof navigator.vibrate === 'function') {
+    navigator.vibrate([200, 100, 200, 100, 400]);
+  }
+}
 
 function playChime() {
   if (!displayAudioCtx) return;
@@ -1290,10 +1336,14 @@ function announcePatient(entry) {
   const voice = getFemaleVoice();
   if (!voice) return;
   const stream = streamFor(entry.visit_type);
-  // Audio only fires when a patient is newly called (not on sub-stage
-  // transitions), so the destination is always Records (clinic) or the
-  // pharmacy window.
-  const where = stream === 'pharmacy' ? 'the pharmacy window' : 'the Records desk';
+  // Destination phrase depends on the current sub-stage. Initial call
+  // sends them to Records (clinic) or the pharmacy window. Sub-stage
+  // transitions announce the next station.
+  let where;
+  if (stream === 'pharmacy') where = 'the pharmacy window';
+  else if (entry.status === 'with_nurse') where = 'the Nurse';
+  else if (entry.status === 'with_doctor') where = 'the Doctor';
+  else where = 'the Records desk';
   const ticket = entry.ticket_number ?? 0;
   // Audio uses the full name. On-screen display still uses the masked
   // form for privacy in the open waiting area.
@@ -1340,17 +1390,23 @@ function renderDisplay() {
     .sort((a, b) => new Date(b.called_at || 0) - new Date(a.called_at || 0))
     .slice(0, 3);
 
-  // Detect newly-called patients (in this render that weren't visible last time)
-  const currentIds = new Set(called.map(e => e.id));
-  const newlyCalled = called.filter(e => !displayVisibleCalledIds.has(e.id));
-  if (newlyCalled.length > 0 && displayAudioUnlocked) {
+  // Announce on new (id, status) pairs for any of called / with_nurse /
+  // with_doctor. Initial state is pre-seeded so we don't replay on load.
+  const newAnnouncements = state.entries.filter(e => {
+    if (!DISPLAY_ANNOUNCEABLE.includes(e.status)) return false;
+    return !displayAnnouncedKeys.has(`${e.id}:${e.status}`);
+  });
+  if (newAnnouncements.length > 0 && displayAudioUnlocked) {
     playChime();
-    // Call the name twice with a gap, so a patient who missed the
-    // first announcement still hears the second.
-    setTimeout(() => newlyCalled.forEach(announcePatient), 1100);
-    setTimeout(() => newlyCalled.forEach(announcePatient), 5500);
+    setTimeout(() => newAnnouncements.forEach(announcePatient), 1100);
+    setTimeout(() => newAnnouncements.forEach(announcePatient), 5500);
   }
-  displayVisibleCalledIds = currentIds;
+  state.entries.forEach(e => {
+    if (DISPLAY_ANNOUNCEABLE.includes(e.status)) {
+      displayAnnouncedKeys.add(`${e.id}:${e.status}`);
+    }
+  });
+  displayVisibleCalledIds = new Set(called.map(e => e.id));
   document.getElementById('d-called').innerHTML = called.map(e => {
     const stream = streamFor(e.visit_type);
     const where = stream === 'pharmacy'
@@ -1381,7 +1437,6 @@ function renderDisplay() {
           : `<ol class="space-y-2">${waiting.map(e => `
               <li class="flex items-center gap-4 rounded-lg bg-slate-900 px-4 py-3">
                 <span class="text-3xl font-black text-emerald-400">#${e.ticket_number ?? '—'}</span>
-                <span class="text-xs text-slate-500">${waitMinutes(e.created_at)} min waiting</span>
               </li>`).join('')}</ol>`}
       </section>`;
   }).join('');
