@@ -88,11 +88,27 @@ const DISPLAY_ANNOUNCEABLE_STATUSES: QueueEntry["status"][] = [
   "with_doctor",
 ];
 
-// Top 3 currently called or preparing, freshest first. Priority entries are
+// Statuses that appear in the public "Now calling" banner. Clinic
+// patients return to the waiting room between sub-stages, so the board
+// must show them when they're being called to the next station.
+//   called      = called to Records
+//   with_nurse  = called to the Nurse (from the waiting room)
+//   with_doctor = called to the Doctor (from the waiting room)
+//   preparing   = pharmacy intermediate
+// at_records is omitted -- once a patient has reached Records they're
+// being attended and don't need to be on the banner.
+const BANNER_STATUSES: QueueEntry["status"][] = [
+  "called",
+  "with_nurse",
+  "with_doctor",
+  "preparing",
+];
+
+// Top 3 currently in-progress, freshest first. Priority entries are
 // hidden from the public display per spec.
 function topCalled(entries: QueueEntry[]): QueueEntry[] {
   return entries
-    .filter((e) => (e.status === "called" || e.status === "preparing") && !e.priority)
+    .filter((e) => BANNER_STATUSES.includes(e.status) && !e.priority)
     .sort(
       (a, b) =>
         new Date(b.called_at ?? 0).getTime() -
@@ -266,6 +282,10 @@ export function QueueDisplay({ initialEntries }: Props) {
                 <div className="mt-0.5 text-sm">
                   {stream === "pharmacy"
                     ? "Please go to the pharmacy window"
+                    : e.status === "with_nurse"
+                    ? "Please go to the Nurse"
+                    : e.status === "with_doctor"
+                    ? "Please go to the Doctor"
                     : "Please go to the Records desk"}
                 </div>
               </div>

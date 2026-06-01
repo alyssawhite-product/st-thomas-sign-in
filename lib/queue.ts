@@ -281,9 +281,11 @@ export async function callEntry(id: string, actor?: { id: string | null; label: 
 
 export async function setPreparing(id: string, actor?: { id: string | null; label: string | null }): Promise<void> {
   const supabase = getServerSupabase();
+  // Bump called_at so the display banner surfaces the most-recently-
+  // transitioned patient (banner sorts by called_at desc).
   const { error } = await supabase
     .from("queue_entries")
-    .update({ status: "preparing" })
+    .update({ status: "preparing", called_at: new Date().toISOString() })
     .eq("id", id);
   if (error) throw error;
   await writeAudit({
@@ -302,9 +304,16 @@ async function setClinicStage(
   actor?: { id: string | null; label: string | null },
 ): Promise<void> {
   const supabase = getServerSupabase();
+  // Bump called_at only on transitions that represent a NEW call to a
+  // station (with_nurse, with_doctor). at_records is an acknowledgment
+  // that the patient has arrived -- not a new call -- so it doesn't
+  // need to surface on the display banner.
+  const isNewCall = status === "with_nurse" || status === "with_doctor";
+  const patch: { status: typeof status; called_at?: string } = { status };
+  if (isNewCall) patch.called_at = new Date().toISOString();
   const { error } = await supabase
     .from("queue_entries")
-    .update({ status })
+    .update(patch)
     .eq("id", id);
   if (error) throw error;
   await writeAudit({
