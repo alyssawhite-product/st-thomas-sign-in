@@ -29,8 +29,9 @@ function playChime(ctx: AudioContext) {
   });
 }
 
-function getFemaleVoice(): SpeechSynthesisVoice | null {
-  const voices = window.speechSynthesis.getVoices();
+const VOICE_STORAGE_KEY = "stq-display-voice";
+
+function pickFemaleVoice(voices: SpeechSynthesisVoice[]): SpeechSynthesisVoice | null {
   return (
     voices.find((v) =>
       /female|zira|samantha|google uk english female/i.test(v.name),
@@ -38,8 +39,22 @@ function getFemaleVoice(): SpeechSynthesisVoice | null {
   );
 }
 
+// Pick the announcement voice: prefer the staff's saved choice; fall
+// back to a female voice; fall back to the first available voice so the
+// announcement still plays even if nothing matches.
+function pickAnnouncementVoice(): SpeechSynthesisVoice | null {
+  if (!("speechSynthesis" in window)) return null;
+  const voices = window.speechSynthesis.getVoices();
+  let preferred: SpeechSynthesisVoice | null = null;
+  try {
+    const savedUri = localStorage.getItem(VOICE_STORAGE_KEY);
+    if (savedUri) preferred = voices.find((v) => v.voiceURI === savedUri) ?? null;
+  } catch { /* ignore */ }
+  return preferred ?? pickFemaleVoice(voices) ?? voices[0] ?? null;
+}
+
 function announcePatient(entry: QueueEntry) {
-  const voice = getFemaleVoice();
+  const voice = pickAnnouncementVoice();
   if (!voice) return;
   const stream = streamFor(entry.visit_type);
   // Destination phrase depends on the current sub-stage. The initial
@@ -137,6 +152,44 @@ export function QueueDisplay({ initialEntries }: Props) {
         .map((e) => `${e.id}:${e.status}`),
     ),
   );
+
+  // Voice picker state. Voices populate after the first user
+  // interaction on some browsers, so we listen for voiceschanged too.
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [voiceUri, setVoiceUri] = useState<string>("");
+
+  useEffect(() => {
+    if (!("speechSynthesis" in window)) return;
+    function refreshVoices() {
+      setVoices(window.speechSynthesis.getVoices());
+    }
+    refreshVoices();
+    window.speechSynthesis.addEventListener("voiceschanged", refreshVoices);
+    try {
+      const saved = localStorage.getItem(VOICE_STORAGE_KEY);
+      if (saved) setVoiceUri(saved);
+    } catch { /* ignore */ }
+    return () => {
+      window.speechSynthesis.removeEventListener("voiceschanged", refreshVoices);
+    };
+  }, []);
+
+  function onSelectVoice(uri: string) {
+    setVoiceUri(uri);
+    try {
+      if (uri) localStorage.setItem(VOICE_STORAGE_KEY, uri);
+      else localStorage.removeItem(VOICE_STORAGE_KEY);
+    } catch { /* ignore */ }
+    // Speak a short preview with the new voice so staff can compare.
+    if (uri && "speechSynthesis" in window && audioCtxRef.current) {
+      const v = voices.find((x) => x.voiceURI === uri);
+      if (v) {
+        const msg = new SpeechSynthesisUtterance("Voice set.");
+        msg.voice = v;
+        window.speechSynthesis.speak(msg);
+      }
+    }
+  }
 
   function unlockAudio() {
     const ctx = new AudioContext();
@@ -254,6 +307,25 @@ export function QueueDisplay({ initialEntries }: Props) {
             St Thomas OPC
           </p>
           <h1 className="mt-1 text-4xl font-bold">Patient Queue</h1>
+          {voices.length > 0 && (
+            <div className="mt-3">
+              <label className="block text-[10px] uppercase tracking-widest text-slate-500">
+                Announcement voice
+              </label>
+              <select
+                value={voiceUri}
+                onChange={(e) => onSelectVoice(e.target.value)}
+                className="mt-1 max-w-xs rounded bg-slate-800 px-2 py-1 text-xs text-slate-200"
+              >
+                <option value="">Auto (female if available)</option>
+                {voices.map((v) => (
+                  <option key={v.voiceURI} value={v.voiceURI}>
+                    {v.name} ({v.lang})
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
         <div className="text-right">
           <p className="text-sm uppercase tracking-widest text-slate-400" suppressHydrationWarning>
