@@ -199,10 +199,6 @@
       <div>
         <p class="text-sm font-semibold uppercase tracking-[0.2em] text-emerald-400">St Thomas OPC</p>
         <h1 class="mt-1 text-4xl font-bold">Patient Queue</h1>
-        <div id="d-voice-row" class="mt-3 hidden">
-          <label class="block text-[10px] uppercase tracking-widest text-slate-500">Announcement voice</label>
-          <select id="d-voice-select" class="mt-1 max-w-xs rounded bg-slate-800 px-2 py-1 text-xs text-slate-200"></select>
-        </div>
       </div>
       <div class="text-right">
         <p class="text-sm uppercase tracking-widest text-slate-400" id="d-date">—</p>
@@ -1330,57 +1326,40 @@ function playChime() {
   });
 }
 
-const VOICE_STORAGE_KEY = 'stq-display-voice';
-
-function pickFemaleVoiceFrom(voices) {
-  return voices.find(v => /female|zira|samantha|google uk english female/i.test(v.name)) ?? null;
+// No Caribbean voice ships with standard browser TTS, so we
+// approximate by preferring non-rhotic English variants: UK > South
+// African > Irish > Australian > US > anything English. Female voices
+// are preferred when available.
+const FEMALE_NAME_RE = /female|zira|samantha|karen|tessa|moira|fiona|kate|serena|hazel/i;
+function isFemaleVoice(v) { return FEMALE_NAME_RE.test(v.name); }
+function langStarts(v, prefix) {
+  return (v.lang ?? '').toLowerCase().startsWith(prefix.toLowerCase());
 }
 
-// Preferred voice = staff's saved choice; falls back to a female voice;
-// falls back to the first available so the announcement still plays.
 function pickAnnouncementVoice() {
   if (!('speechSynthesis' in window)) return null;
   const voices = window.speechSynthesis.getVoices();
-  let preferred = null;
-  try {
-    const savedUri = localStorage.getItem(VOICE_STORAGE_KEY);
-    if (savedUri) preferred = voices.find(v => v.voiceURI === savedUri) ?? null;
-  } catch (e) { /* ignore */ }
-  return preferred ?? pickFemaleVoiceFrom(voices) ?? voices[0] ?? null;
-}
-
-function refreshVoiceSelect() {
-  if (!('speechSynthesis' in window)) return;
-  const sel = document.getElementById('d-voice-select');
-  const row = document.getElementById('d-voice-row');
-  if (!sel || !row) return;
-  const voices = window.speechSynthesis.getVoices();
-  if (voices.length === 0) return;
-  row.classList.remove('hidden');
-  let savedUri = '';
-  try { savedUri = localStorage.getItem(VOICE_STORAGE_KEY) ?? ''; } catch (e) {}
-  sel.innerHTML = '<option value="">Auto (female if available)</option>' +
-    voices.map(v => `<option value="${v.voiceURI}"${v.voiceURI === savedUri ? ' selected' : ''}>${v.name} (${v.lang})</option>`).join('');
-  sel.onchange = () => {
-    const uri = sel.value;
-    try {
-      if (uri) localStorage.setItem(VOICE_STORAGE_KEY, uri);
-      else localStorage.removeItem(VOICE_STORAGE_KEY);
-    } catch (e) {}
-    // Speak a preview with the new voice so staff can compare.
-    if (uri && displayAudioUnlocked) {
-      const v = voices.find(x => x.voiceURI === uri);
-      if (v) {
-        const msg = new SpeechSynthesisUtterance('Voice set.');
-        msg.voice = v;
-        window.speechSynthesis.speak(msg);
-      }
-    }
-  };
-}
-if ('speechSynthesis' in window) {
-  refreshVoiceSelect();
-  window.speechSynthesis.addEventListener('voiceschanged', refreshVoiceSelect);
+  if (voices.length === 0) return null;
+  const tests = [
+    v => langStarts(v, 'en-GB') && isFemaleVoice(v),
+    v => /^en-(cb|jm|tt|bs|bb|gd|lc|vc)/i.test(v.lang ?? ''),
+    v => langStarts(v, 'en-GB'),
+    v => langStarts(v, 'en-ZA') && isFemaleVoice(v),
+    v => langStarts(v, 'en-ZA'),
+    v => langStarts(v, 'en-IE') && isFemaleVoice(v),
+    v => langStarts(v, 'en-IE'),
+    v => langStarts(v, 'en-AU') && isFemaleVoice(v),
+    v => langStarts(v, 'en-AU'),
+    v => langStarts(v, 'en-US') && isFemaleVoice(v),
+    v => langStarts(v, 'en') && isFemaleVoice(v),
+    v => langStarts(v, 'en'),
+    () => true,
+  ];
+  for (const test of tests) {
+    const match = voices.find(test);
+    if (match) return match;
+  }
+  return voices[0] ?? null;
 }
 
 function announcePatient(entry) {
