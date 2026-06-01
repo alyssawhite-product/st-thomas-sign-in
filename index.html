@@ -688,6 +688,7 @@ function setPreparing(id) {
   const entry = state.entries.find(e => e.id === id);
   if (!entry) return;
   entry.status = 'preparing';
+  entry.called_at = new Date().toISOString();
   save();
 }
 function setPharmacyNote(id, note) {
@@ -1385,8 +1386,13 @@ function renderDisplay() {
     }
   }
 
+  // Patients sit in the waiting room between sub-stages, so the banner
+  // must show them when they're called to Records / Nurse / Doctor.
+  // at_records is omitted -- once the patient has arrived they're being
+  // attended and don't need to be on the banner.
+  const BANNER_STATUSES = ['called', 'with_nurse', 'with_doctor', 'preparing'];
   const called = state.entries
-    .filter(e => (e.status === 'called' || e.status === 'preparing') && !e.priority)
+    .filter(e => BANNER_STATUSES.includes(e.status) && !e.priority)
     .sort((a, b) => new Date(b.called_at || 0) - new Date(a.called_at || 0))
     .slice(0, 3);
 
@@ -1411,6 +1417,10 @@ function renderDisplay() {
     const stream = streamFor(e.visit_type);
     const where = stream === 'pharmacy'
       ? 'Please go to the pharmacy window'
+      : e.status === 'with_nurse'
+      ? 'Please go to the Nurse'
+      : e.status === 'with_doctor'
+      ? 'Please go to the Doctor'
       : 'Please go to the Records desk';
     return `
       <div class="flex-1 min-w-56 rounded-lg bg-amber-400 px-6 py-5 text-slate-950">
@@ -1580,6 +1590,12 @@ function setClinicStage(id, status) {
   const entry = state.entries.find(e => e.id === id);
   if (!entry) return;
   entry.status = status;
+  // Bump called_at on transitions to a new station so the banner sorts
+  // by "most recently called". at_records is an acknowledgment so no
+  // bump.
+  if (status === 'with_nurse' || status === 'with_doctor') {
+    entry.called_at = new Date().toISOString();
+  }
   save();
 }
 function wireStaffRowButtons() {
