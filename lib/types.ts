@@ -1,10 +1,13 @@
 export type QueueStatus = "waiting" | "called" | "preparing" | "seen";
 
-export type VisitType = "general" | "follow-up" | "pharmacy" | "other";
+export type VisitType = "records" | "general" | "follow-up" | "pharmacy" | "other";
 
 export type IdType = "national_id" | "passport";
 
-export type Stream = "clinical" | "pharmacy";
+// Three patient-facing departments. Records is typically the patient's
+// first stop; from there they are transferred to General Clinic and/or
+// Pharmacy as needed.
+export type Stream = "records" | "clinical" | "pharmacy";
 
 export type HasPrescription = "yes" | "no" | "electronic";
 
@@ -59,6 +62,7 @@ export interface QueueAuditRow {
 }
 
 export const VISIT_TYPES: { value: VisitType; label: string; description: string }[] = [
+  { value: "records", label: "Records", description: "Patient records desk -- usually the first stop on arrival." },
   { value: "general", label: "General", description: "For consultations, referrals, or new concerns not covered by the options below." },
   { value: "follow-up", label: "Follow-up", description: "A return visit to check on a previous condition or treatment." },
   { value: "pharmacy", label: "Pharmacy", description: "To collect or enquire about a prescription or medication." },
@@ -68,13 +72,32 @@ export const VISIT_TYPES: { value: VisitType; label: string; description: string
 export const VISIT_TYPE_VALUES = VISIT_TYPES.map((v) => v.value);
 
 export const STREAM_LABELS: Record<Stream, string> = {
+  records: "Records",
   clinical: "General Clinic",
   pharmacy: "Pharmacy",
 };
 
 export function streamFor(visitType: string): Stream {
-  return visitType === "pharmacy" ? "pharmacy" : "clinical";
+  if (visitType === "records") return "records";
+  if (visitType === "pharmacy") return "pharmacy";
+  return "clinical";
 }
+
+// Transfer destinations. Patients move between these three departments;
+// each maps to a default visit_type used when arriving via transfer.
+// Pharmacy needs an additional prescription question.
+export interface Department {
+  stream: Stream;
+  label: string;
+  defaultVisitType: VisitType;
+  askPrescription?: boolean;
+}
+
+export const DEPARTMENTS: Department[] = [
+  { stream: "records", label: "Records", defaultVisitType: "records" },
+  { stream: "clinical", label: "General Clinic", defaultVisitType: "general" },
+  { stream: "pharmacy", label: "Pharmacy", defaultVisitType: "pharmacy", askPrescription: true },
+];
 
 export const PRESCRIPTION_OPTIONS: { value: HasPrescription; label: string; description: string }[] = [
   { value: "yes", label: "Yes, paper prescription in hand", description: "I have the paper from my doctor today." },

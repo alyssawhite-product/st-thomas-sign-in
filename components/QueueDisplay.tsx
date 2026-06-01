@@ -42,7 +42,10 @@ function announcePatient(entry: QueueEntry) {
   const voice = getFemaleVoice();
   if (!voice) return;
   const stream = streamFor(entry.visit_type);
-  const where = stream === "pharmacy" ? "the pharmacy window" : "the General Clinic";
+  const where =
+    stream === "pharmacy" ? "the pharmacy window" :
+    stream === "records" ? "Records" :
+    "the General Clinic";
   const ticket = entry.ticket_number ?? 0;
   const msg = new SpeechSynthesisUtterance(
     `Number ${ticket}, ${maskedDisplayName(entry.name)}. Please go to ${where}.`,
@@ -170,7 +173,7 @@ export function QueueDisplay({ initialEntries }: Props) {
         (a, b) =>
           new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
       );
-    const streams: Stream[] = ["clinical", "pharmacy"];
+    const streams: Stream[] = ["records", "clinical", "pharmacy"];
     return {
       calledNow: topCalled(entries),
       columns: streams.map((s) => ({
@@ -226,7 +229,11 @@ export function QueueDisplay({ initialEntries }: Props) {
                 <div className="mt-1 text-6xl font-black">#{e.ticket_number ?? "—"}</div>
                 <div className="mt-1 text-2xl font-bold">{maskedDisplayName(e.name)}</div>
                 <div className="mt-0.5 text-sm">
-                  {stream === "pharmacy" ? "Please go to the pharmacy window" : "Please go to the General Clinic"}
+                  {stream === "pharmacy"
+                    ? "Please go to the pharmacy window"
+                    : stream === "records"
+                    ? "Please go to Records"
+                    : "Please go to the General Clinic"}
                 </div>
               </div>
             );
@@ -234,7 +241,7 @@ export function QueueDisplay({ initialEntries }: Props) {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-6 px-10 py-8 lg:grid-cols-2">
+      <div className="grid grid-cols-1 gap-6 px-10 py-8 lg:grid-cols-3">
         {columns.map((col) => (
           <section key={col.stream}>
             <h2 className="mb-3 rounded-md bg-slate-800 px-4 py-2 text-center text-2xl font-semibold tracking-wide text-slate-100">

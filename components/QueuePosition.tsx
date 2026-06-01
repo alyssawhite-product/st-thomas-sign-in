@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { getBrowserSupabase } from "@/lib/supabase";
 import type { QueueEntry, QueueStatus } from "@/lib/types";
-import { VISIT_TYPES, streamFor } from "@/lib/types";
+import { DEPARTMENTS, streamFor } from "@/lib/types";
 import { patientTransferAction } from "@/app/actions";
 
 const AVG_MINUTES_PER_PATIENT = 8;
@@ -125,7 +125,11 @@ export function QueuePosition({ initialEntry, initialAhead }: Props) {
   );
 
   if (state.status === "called" || state.status === "preparing") {
-    const isPharmacy = streamFor(state.visitType) === "pharmacy";
+    const myStream = streamFor(state.visitType);
+    const wherePhrase =
+      myStream === "pharmacy" ? "the pharmacy window" :
+      myStream === "records" ? "Records" :
+      "the General Clinic";
     return (
       <>
         <section className="rounded-xl bg-amber-100 p-8 text-center ring-4 ring-amber-400">
@@ -140,7 +144,7 @@ export function QueuePosition({ initialEntry, initialAhead }: Props) {
             </p>
           )}
           <h2 className="mt-3 text-2xl font-bold text-amber-900">
-            Please go to {isPharmacy ? "the pharmacy window" : "the General Clinic"}
+            Please go to {wherePhrase}
           </h2>
         </section>
         {kioskBanner}
@@ -201,7 +205,9 @@ function TransferForm({ token, currentVisitType }: { token: string; currentVisit
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [picking, setPicking] = useState<string | null>(null);
-  const otherTypes = VISIT_TYPES.filter((v) => v.value !== currentVisitType);
+  const currentStream = streamFor(currentVisitType);
+  // Offer the two departments the patient is not already in.
+  const others = DEPARTMENTS.filter((d) => d.stream !== currentStream);
 
   function onTransfer(visitType: string, hasPrescription?: string) {
     setError(null);
@@ -234,21 +240,21 @@ function TransferForm({ token, currentVisitType }: { token: string; currentVisit
         You&apos;ll be placed at the end of the new queue.
       </p>
       <div className="mt-3 flex flex-wrap gap-2">
-        {otherTypes.map((v) => (
+        {others.map((dept) => (
           <button
-            key={v.value}
+            key={dept.stream}
             type="button"
             disabled={pending}
             onClick={() => {
-              if (v.value === "pharmacy") {
+              if (dept.askPrescription) {
                 setPicking("pharmacy");
               } else {
-                onTransfer(v.value);
+                onTransfer(dept.defaultVisitType);
               }
             }}
             className="rounded-lg border border-brand px-4 py-2 text-sm font-semibold text-brand hover:bg-brand-light disabled:opacity-50"
           >
-            Move to {v.label}
+            Move to {dept.label}
           </button>
         ))}
       </div>

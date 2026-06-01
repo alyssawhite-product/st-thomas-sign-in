@@ -15,8 +15,9 @@ function startOfTodayIso(): string {
 async function nextTicketNumber(stream: Stream): Promise<number> {
   const supabase = getServerSupabase();
   const since = startOfTodayIso();
-  const isPharmacy = stream === "pharmacy";
 
+  // Tickets are scoped per stream. Records, General Clinic, and Pharmacy
+  // each get their own daily 1..N sequence.
   let query = supabase
     .from("queue_entries")
     .select("ticket_number")
@@ -24,9 +25,14 @@ async function nextTicketNumber(stream: Stream): Promise<number> {
     .order("ticket_number", { ascending: false })
     .limit(1);
 
-  query = isPharmacy
-    ? query.eq("visit_type", "pharmacy")
-    : query.neq("visit_type", "pharmacy");
+  if (stream === "pharmacy") {
+    query = query.eq("visit_type", "pharmacy");
+  } else if (stream === "records") {
+    query = query.eq("visit_type", "records");
+  } else {
+    // Clinical = everything that isn't records or pharmacy.
+    query = query.neq("visit_type", "pharmacy").neq("visit_type", "records");
+  }
 
   const { data } = await query.maybeSingle();
   const last = (data?.ticket_number as number | null) ?? 0;

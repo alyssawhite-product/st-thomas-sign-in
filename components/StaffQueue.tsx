@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { getBrowserSupabase } from "@/lib/supabase";
 import type { QueueEntry, StaffRole } from "@/lib/types";
-import { STREAM_LABELS, VISIT_TYPES, streamFor } from "@/lib/types";
+import { DEPARTMENTS, STREAM_LABELS, VISIT_TYPES, streamFor } from "@/lib/types";
 import { PoweredBy } from "@/components/PoweredBy";
 import {
   callPatientAction,
@@ -46,6 +46,7 @@ export function StaffQueue({ initialEntries, role, email }: Props) {
   const [confirmingReset, setConfirmingReset] = useState(false);
   const [showPriorityForm, setShowPriorityForm] = useState(false);
   const [activeTab, setActiveTab] = useState<Tab>("waiting");
+  const [openMoveFor, setOpenMoveFor] = useState<string | null>(null);
 
   useEffect(() => {
     const supabase = getBrowserSupabase();
@@ -74,8 +75,9 @@ export function StaffQueue({ initialEntries, role, email }: Props) {
     return () => { void supabase.removeChannel(channel); };
   }, []);
 
-  // Clinic dashboard is scoped to the clinical stream only. Pharmacy
-  // entries are handled exclusively on /pharmacy.
+  // Clinic dashboard handles non-pharmacy patients: General Clinic +
+  // Records (until a dedicated Records portal exists). Pharmacy entries
+  // are managed on /pharmacy.
   const clinicalEntries = useMemo(
     () => entries.filter((e) => streamFor(e.visit_type) !== "pharmacy"),
     [entries],
@@ -102,11 +104,12 @@ export function StaffQueue({ initialEntries, role, email }: Props) {
     startTransition(() => action(fd));
   }
 
-  function handleMoveToPharmacy(id: string) {
+  function handleMove(id: string, visitType: string) {
     const fd = new FormData();
     fd.set("id", id);
-    fd.set("visit_type", "pharmacy");
+    fd.set("visit_type", visitType);
     startTransition(() => staffTransferAction(fd));
+    setOpenMoveFor(null);
   }
 
   function handleReset() {
@@ -269,17 +272,34 @@ export function StaffQueue({ initialEntries, role, email }: Props) {
                         >
                           Mark seen
                         </button>
-                        {/* Pharmacy is the only valid onward queue. */}
-                        {stream !== "pharmacy" && (
+                        {/* Patient can move on to either of the other two
+                            departments (Records / General Clinic / Pharmacy). */}
+                        <div className="relative">
                           <button
                             type="button"
                             className="btn-secondary"
                             disabled={pending}
-                            onClick={() => handleMoveToPharmacy(e.id)}
+                            onClick={() =>
+                              setOpenMoveFor((curr) => (curr === e.id ? null : e.id))
+                            }
                           >
-                            Move to pharmacy
+                            Move to…
                           </button>
-                        )}
+                          {openMoveFor === e.id && (
+                            <div className="absolute right-0 z-10 mt-1 w-44 rounded-md border border-slate-200 bg-white shadow-lg">
+                              {DEPARTMENTS.filter((d) => d.stream !== stream).map((d) => (
+                                <button
+                                  key={d.stream}
+                                  type="button"
+                                  className="block w-full px-3 py-2 text-left text-sm hover:bg-slate-100"
+                                  onClick={() => handleMove(e.id, d.defaultVisitType)}
+                                >
+                                  {d.label}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       </>
                     )}
                   </div>

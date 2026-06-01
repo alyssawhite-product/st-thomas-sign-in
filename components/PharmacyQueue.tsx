@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { getBrowserSupabase } from "@/lib/supabase";
 import type { QueueEntry, StaffRole } from "@/lib/types";
+import { DEPARTMENTS } from "@/lib/types";
 import { PoweredBy } from "@/components/PoweredBy";
 import {
   callPatientAction,
@@ -10,6 +11,7 @@ import {
   savePharmacyNoteAction,
   setPreparingAction,
   staffLogoutAction,
+  staffTransferAction,
 } from "@/app/actions";
 
 interface Props {
@@ -54,6 +56,15 @@ function sortQueueOrder(a: QueueEntry, b: QueueEntry) {
 export function PharmacyQueue({ initialEntries, email, role }: Props) {
   const [entries, setEntries] = useState<QueueEntry[]>(initialEntries);
   const [pending, startTransition] = useTransition();
+  const [openMoveFor, setOpenMoveFor] = useState<string | null>(null);
+
+  function handleMove(id: string, visitType: string) {
+    const fd = new FormData();
+    fd.set("id", id);
+    fd.set("visit_type", visitType);
+    startTransition(() => staffTransferAction(fd));
+    setOpenMoveFor(null);
+  }
   const [, setNow] = useState(Date.now());
   const [activeTab, setActiveTab] = useState<Tab>("waiting");
 
@@ -264,6 +275,37 @@ export function PharmacyQueue({ initialEntries, email, role }: Props) {
                       >
                         Mark served
                       </button>
+                    )}
+                    {/* Re-enabled per May 27 stakeholder feedback: pharmacy
+                        is one of three departments; staff can route to
+                        Records or General Clinic if needed. */}
+                    {!isWaiting && (
+                      <div className="relative">
+                        <button
+                          type="button"
+                          className="btn-secondary"
+                          disabled={pending}
+                          onClick={() =>
+                            setOpenMoveFor((curr) => (curr === e.id ? null : e.id))
+                          }
+                        >
+                          Move to…
+                        </button>
+                        {openMoveFor === e.id && (
+                          <div className="absolute right-0 z-10 mt-1 w-44 rounded-md border border-slate-200 bg-white shadow-lg">
+                            {DEPARTMENTS.filter((d) => d.stream !== "pharmacy").map((d) => (
+                              <button
+                                key={d.stream}
+                                type="button"
+                                className="block w-full px-3 py-2 text-left text-sm hover:bg-slate-100"
+                                onClick={() => handleMove(e.id, d.defaultVisitType)}
+                              >
+                                {d.label}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
                 </li>
