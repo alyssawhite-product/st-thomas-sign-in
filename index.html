@@ -105,6 +105,12 @@
         <p id="si-visit-type-error" class="mt-2 hidden text-sm font-medium text-red-700"></p>
       </fieldset>
 
+      <fieldset id="si-consultation-fs" class="hidden">
+        <legend class="field-label">Is this a new consultation or a follow-up?</legend>
+        <div class="mt-3 space-y-2" id="si-consultation-opts"></div>
+        <p id="si-consultation-type-error" class="mt-2 hidden text-sm font-medium text-red-700"></p>
+      </fieldset>
+
       <fieldset id="si-prescription-fs" class="hidden">
         <legend class="field-label">Do you have a prescription?</legend>
         <div class="mt-3 space-y-2" id="si-prescription-opts"></div>
@@ -420,6 +426,18 @@ const PRESCRIPTION_OPTIONS = [
   { value: 'yes', label: 'Yes, paper prescription in hand', description: "I have the paper from my doctor today." },
   { value: 'electronic', label: 'Electronic prescription on file', description: "My doctor sent it to the pharmacy already." },
   { value: 'no', label: 'No prescription yet', description: "I'm here to ask about a medication or pick something up without a prescription." },
+];
+// UI grouping for visit type. "general_clinic" is a wrapper that collapses
+// the underlying "general" and "follow-up" visit_type values into a
+// sub-choice.
+const TOP_LEVEL_VISITS = [
+  { value: 'general_clinic', label: 'General Clinic', description: 'Consultations, referrals, or new health concerns.' },
+  { value: 'pharmacy', label: 'Pharmacy', description: 'To collect or enquire about a prescription or medication.' },
+  { value: 'other', label: 'Other', description: 'For any visit not covered by the options above.' },
+];
+const CONSULTATION_TYPES = [
+  { value: 'general', label: 'New consultation', description: 'A first visit for a new health concern or referral.' },
+  { value: 'follow-up', label: 'Follow-up', description: 'A return visit to check on a previous condition or treatment.' },
 ];
 const COUNTRY_OPTIONS = [
   // CARICOM (excluding Barbados; that's the National branch)
@@ -753,9 +771,9 @@ document.querySelectorAll('.nav-btn').forEach(b => {
 // ============================================================
 function renderSigninForm() {
   const wrap = document.getElementById('si-visit-types');
-  wrap.innerHTML = VISIT_TYPES.map((v, i) => `
+  wrap.innerHTML = TOP_LEVEL_VISITS.map((v, i) => `
     <label class="flex cursor-pointer items-start gap-3 rounded-md border border-slate-300 px-4 py-3 text-base has-[:checked]:border-brand has-[:checked]:bg-brand-light">
-      <input ${i === 0 ? 'id="visit-type-general"' : ''} type="radio" name="si-visit-type" value="${v.value}" class="mt-0.5 h-5 w-5 shrink-0 accent-emerald-700" />
+      <input ${i === 0 ? 'id="visit-type-general_clinic"' : ''} type="radio" name="si-visit-type" value="${v.value}" class="mt-0.5 h-5 w-5 shrink-0 accent-emerald-700" />
       <span class="flex flex-col">
         <span class="font-medium">${v.label}</span>
         <span class="text-sm text-slate-500">${v.description}</span>
@@ -765,8 +783,21 @@ function renderSigninForm() {
   wrap.querySelectorAll('input').forEach(r => {
     r.addEventListener('change', () => {
       updatePrescriptionVisibility();
+      updateConsultationVisibility();
       siClearFieldError('visit-type');
+      siClearFieldError('consultation-type');
     });
+  });
+
+  const consWrap = document.getElementById('si-consultation-opts');
+  consWrap.innerHTML = CONSULTATION_TYPES.map((opt, i) => `
+    <label class="flex cursor-pointer items-start gap-3 rounded-md border border-slate-300 px-4 py-3 text-base has-[:checked]:border-brand has-[:checked]:bg-brand-light">
+      <input ${i === 0 ? 'id="consultation-type-general"' : ''} type="radio" name="si-consultation-type" value="${opt.value}" class="mt-0.5 h-5 w-5 shrink-0 accent-emerald-700" />
+      <span class="flex flex-col"><span class="font-medium">${opt.label}</span><span class="text-sm text-slate-500">${opt.description}</span></span>
+    </label>
+  `).join('');
+  consWrap.querySelectorAll('input').forEach(r => {
+    r.addEventListener('change', () => siClearFieldError('consultation-type'));
   });
 
   const opts = document.getElementById('si-prescription-opts');
@@ -841,14 +872,24 @@ function updatePrescriptionVisibility() {
   const show = picked && picked.value === 'pharmacy';
   document.getElementById('si-prescription-fs').classList.toggle('hidden', !show);
 }
+function updateConsultationVisibility() {
+  const picked = document.querySelector('input[name="si-visit-type"]:checked');
+  const show = picked && picked.value === 'general_clinic';
+  document.getElementById('si-consultation-fs').classList.toggle('hidden', !show);
+  if (!show) {
+    // Clear any stale sub-choice so it doesn't carry across branches.
+    document.querySelectorAll('input[name="si-consultation-type"]').forEach(r => (r.checked = false));
+  }
+}
 // --- Sign-in: full-form validation with summary, inline errors, reactive clear -----
-const SI_FIELDS = ['name', 'nationality', 'country', 'id-number', 'visit-type', 'has-prescription'];
+const SI_FIELDS = ['name', 'nationality', 'country', 'id-number', 'visit-type', 'consultation-type', 'has-prescription'];
 const SI_FIELD_META = {
   'name': { input: 'si-name', label: 'Your name', emptyMsg: 'Enter a name that is at least 2 characters.' },
   'nationality': { input: 'si-name', label: 'Nationality', emptyMsg: 'Tell us whether you are a national or non-national.' },
   'country': { input: 'si-country', label: 'Country of origin', emptyMsg: 'Choose your country of origin.' },
   'id-number': { input: 'si-id-number', label: 'Identification number', emptyMsg: 'Enter your ID number.' },
-  'visit-type': { input: 'visit-type-general', label: 'Type of visit', emptyMsg: 'Choose a type of visit.' },
+  'visit-type': { input: 'visit-type-general_clinic', label: 'Type of visit', emptyMsg: 'Choose a type of visit.' },
+  'consultation-type': { input: 'consultation-type-general', label: 'Consultation type', emptyMsg: 'Choose new consultation or follow-up.' },
   'has-prescription': { input: 'has-prescription-yes', label: 'Prescription', emptyMsg: 'Tell us about your prescription.' },
 };
 
@@ -930,7 +971,15 @@ document.getElementById('signin-form').addEventListener('submit', (e) => {
     : (document.querySelector('input[name="si-id-type"]:checked')?.value || 'national_id');
   const idNumber = document.getElementById('si-id-number').value.trim();
   const visitTypeEl = document.querySelector('input[name="si-visit-type"]:checked');
-  const visitType = visitTypeEl ? visitTypeEl.value : '';
+  const topLevelVisit = visitTypeEl ? visitTypeEl.value : '';
+  const consultEl = document.querySelector('input[name="si-consultation-type"]:checked');
+  const consultationType = consultEl ? consultEl.value : '';
+  // Collapse the UI grouping to the underlying visit_type value.
+  const visitType =
+    topLevelVisit === 'general_clinic' ? consultationType
+    : topLevelVisit === 'pharmacy' ? 'pharmacy'
+    : topLevelVisit === 'other' ? 'other'
+    : '';
   const rxEl = document.querySelector('input[name="si-rx"]:checked');
   const rx = rxEl ? rxEl.value : '';
 
@@ -951,11 +1000,15 @@ document.getElementById('signin-form').addEventListener('submit', (e) => {
     siShowFieldError('id-number', 'Enter your ID number.');
     hasError = true;
   }
-  if (!visitType) {
+  if (!topLevelVisit) {
     siShowFieldError('visit-type', 'Choose a type of visit.');
     hasError = true;
   }
-  if (visitType === 'pharmacy' && !rx) {
+  if (topLevelVisit === 'general_clinic' && !consultationType) {
+    siShowFieldError('consultation-type', 'Choose new consultation or follow-up.');
+    hasError = true;
+  }
+  if (topLevelVisit === 'pharmacy' && !rx) {
     siShowFieldError('has-prescription', 'Tell us about your prescription.');
     hasError = true;
   }
@@ -989,6 +1042,7 @@ document.getElementById('signin-form').addEventListener('submit', (e) => {
   // Reset visibility states
   document.getElementById('si-country-row').classList.add('hidden');
   document.getElementById('si-id-type-row').classList.add('hidden');
+  document.getElementById('si-consultation-fs').classList.add('hidden');
   document.querySelector('input[name="si-id-type"][value="national_id"]').checked = true;
   document.getElementById('si-prescription-fs').classList.add('hidden');
   siUpdateIdLabel();
