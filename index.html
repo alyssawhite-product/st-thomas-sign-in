@@ -399,6 +399,21 @@
 // ============================================================
 const STORAGE_KEY = 'stthomas-queue-preview-v1';
 
+// Tester reset: opening the demo with ?reset wipes localStorage so the
+// next load() re-seeds with the original preloaded patients. Useful
+// after a stakeholder demo when the queue has been mutated. We strip
+// the flag from the URL so a refresh doesn't keep nuking state.
+(function maybeReset() {
+  try {
+    const url = new URL(window.location.href);
+    if (url.searchParams.has('reset')) {
+      localStorage.removeItem(STORAGE_KEY);
+      url.searchParams.delete('reset');
+      window.history.replaceState({}, '', url.toString());
+    }
+  } catch {}
+})();
+
 function poweredByHTML(variant) {
   const captionColor = variant === 'dark' ? 'text-slate-400' : 'text-slate-500';
   const brandColor = variant === 'dark' ? 'text-slate-100' : 'text-slate-700';
