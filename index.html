@@ -269,6 +269,7 @@
       <button id="staff-signout" class="btn-secondary">Sign out</button>
     </header>
 
+    <div class="mt-6" id="staff-help-banner"></div>
     <div class="mt-6 grid grid-cols-3 gap-4 text-center" id="staff-stats"></div>
 
     <div class="mt-6 flex flex-wrap gap-2">
@@ -324,6 +325,7 @@
       <button id="pharm-signout" class="btn-secondary">Sign out</button>
     </header>
 
+    <div id="pharm-help-banner"></div>
     <div class="grid grid-cols-3 gap-4 text-center mb-6" id="pharm-stats"></div>
 
     <div class="border-b border-slate-200">
@@ -1399,6 +1401,63 @@ function buzzPhone() {
   }
 }
 
+// Y-batch: distinct alarm-like chime for the staff dashboards when a
+// patient presses Request Help. Square-wave so it sounds urgent, not
+// like the gentle patient chime. Fires once per (entry, request).
+const staffAlertedHelpIds = new Set();
+function playHelpAlertChime() {
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    [880, 660, 880, 660, 880].forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain); gain.connect(ctx.destination);
+      osc.type = 'square';
+      osc.frequency.value = freq;
+      const start = ctx.currentTime + i * 0.18;
+      gain.gain.setValueAtTime(0, start);
+      gain.gain.linearRampToValueAtTime(0.4, start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.16);
+      osc.start(start);
+      osc.stop(start + 0.18);
+    });
+  } catch (e) {
+    // Audio may be blocked until staff interacts; the banner is the
+    // redundant alert.
+  }
+}
+// Returns the markup for the pulsing red banner + fires the chime
+// for any newly-arrived requests. Call inside renderStaff /
+// renderPharmacy.
+function renderHelpAlertBanner(requesters) {
+  if (!requesters || requesters.length === 0) return '';
+  let anyNew = false;
+  for (const e of requesters) {
+    if (!staffAlertedHelpIds.has(e.id)) {
+      staffAlertedHelpIds.add(e.id);
+      anyNew = true;
+    }
+  }
+  if (anyNew) playHelpAlertChime();
+  const names = requesters.map(e => escapeHtml(e.name));
+  const line = requesters.length === 1
+    ? `${names[0]} has pressed Request Help.`
+    : `${requesters.length} patients have pressed Request Help: ${names.join(', ')}.`;
+  return `
+    <div role="alert" class="mb-6 animate-pulse rounded-xl border-2 border-red-500 bg-red-600 p-5 text-white shadow-lg">
+      <div class="flex items-center gap-3">
+        <span class="text-3xl" aria-hidden>🆘</span>
+        <div class="flex-1">
+          <p class="text-sm font-bold uppercase tracking-wider">Help requested</p>
+          <p class="mt-1 text-lg font-semibold">${line}</p>
+          <p class="mt-1 text-sm text-red-100">Reach the patient now, then Call or Mark urgent to clear this alert.</p>
+        </div>
+      </div>
+    </div>`;
+}
+
 function playChime() {
   if (!displayAudioCtx) return;
   const ctx = displayAudioCtx;
@@ -1602,6 +1661,10 @@ function renderStaff() {
   // Clinic dashboard is scoped to the clinical stream only. Pharmacy
   // entries are handled exclusively on /pharmacy.
   const clinicalEntries = state.entries.filter(e => streamFor(e.visit_type) === 'clinical');
+  // Y-batch: patients who pressed Request Help and are still waiting.
+  // Banner pulses + audio chime fires once per new request.
+  const helpRequesters = clinicalEntries.filter(e => e.help_requested_at && e.status === 'waiting');
+  document.getElementById('staff-help-banner').innerHTML = renderHelpAlertBanner(helpRequesters);
   const stats = {
     waiting: clinicalEntries.filter(e => e.status === 'waiting').length,
     called: clinicalEntries.filter(e => CLINIC_IN_PROGRESS.includes(e.status)).length,
@@ -1789,6 +1852,10 @@ function renderPharmacy() {
   if (!state.staff || (state.staff.role !== 'pharmacist' && state.staff.role !== 'admin')) return;
   document.getElementById('pharm-whoami').textContent = `Signed in as ${state.staff.email} (${state.staff.role})`;
   const list = state.entries.filter(e => e.visit_type === 'pharmacy').sort(sortQueueOrder);
+  // Y-batch: pharmacy patients who pressed Request Help while still
+  // waiting. Same banner + chime as the clinic dashboard.
+  const helpRequesters = list.filter(e => e.help_requested_at && e.status === 'waiting');
+  document.getElementById('pharm-help-banner').innerHTML = renderHelpAlertBanner(helpRequesters);
   const stats = {
     waiting: list.filter(e => e.status === 'waiting').length,
     called: list.filter(e => e.status === 'called' || e.status === 'preparing').length,
