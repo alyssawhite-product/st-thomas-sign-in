@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { getBrowserSupabase } from "@/lib/supabase";
 import type { QueueEntry, StaffRole } from "@/lib/types";
 import { DEPARTMENTS, STREAM_LABELS, VISIT_TYPES, streamFor } from "@/lib/types";
@@ -60,34 +60,6 @@ const CLINIC_IN_PROGRESS: QueueEntry["status"][] = [
   "with_doctor",
 ];
 
-// Three rapid high-low descending beeps — distinct from the patient
-// chime so staff know it's an incoming help request, not a routine
-// status change. Fires once per request (see useEffect below).
-function playHelpAlertChime() {
-  try {
-    const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    if (!Ctx) return;
-    const ctx = new Ctx();
-    const sequence = [880, 660, 880, 660, 880]; // alarm-like
-    sequence.forEach((freq, i) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.type = "square";
-      osc.frequency.value = freq;
-      const start = ctx.currentTime + i * 0.18;
-      gain.gain.setValueAtTime(0, start);
-      gain.gain.linearRampToValueAtTime(0.4, start + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.16);
-      osc.start(start);
-      osc.stop(start + 0.18);
-    });
-  } catch {
-    // Audio may be blocked until staff interacts with the page. The
-    // visual banner is the redundant alert.
-  }
-}
 
 function sortQueueOrder(a: QueueEntry, b: QueueEntry) {
   if (a.priority !== b.priority) return a.priority ? -1 : 1;
@@ -150,20 +122,8 @@ export function StaffQueue({ initialEntries, role, email }: Props) {
     [clinicalEntries],
   );
 
-  // Fire the alert chime once per new help request -- not on every
-  // realtime poll. We key by entry.id so re-opens of the same request
-  // (page refresh) don't re-alarm.
-  const alertedHelpIdsRef = useRef<Set<string>>(new Set());
-  useEffect(() => {
-    let anyNew = false;
-    for (const e of helpRequesters) {
-      if (!alertedHelpIdsRef.current.has(e.id)) {
-        alertedHelpIdsRef.current.add(e.id);
-        anyNew = true;
-      }
-    }
-    if (anyNew) playHelpAlertChime();
-  }, [helpRequesters]);
+  // Visual banner only -- no audio. (Audio alerts proved unreliable in
+  // the demo; staff feedback can re-add it if needed.)
 
   // Stats: Waiting / Called / Seen. The "Called" bucket spans every
   // in-progress sub-stage (called, at_records, with_nurse, with_doctor).
@@ -229,13 +189,12 @@ export function StaffQueue({ initialEntries, role, email }: Props) {
 
       {/* Help-request alert banner. Visible whenever there are
           un-acted-upon Request Help presses from patient phones.
-          Pulses red to grab a clinician's eye even if they missed the
-          chime. Clears automatically once each patient gets called /
-          marked seen. */}
+          Solid red (no flash, no audio) -- clears automatically once
+          a clinician calls or marks the patient urgent. */}
       {helpRequesters.length > 0 && (
         <div
           role="alert"
-          className="mt-6 animate-pulse rounded-xl border-2 border-red-500 bg-red-600 p-5 text-white shadow-lg"
+          className="mt-6 rounded-xl border-2 border-red-500 bg-red-600 p-5 text-white shadow-lg"
         >
           <div className="flex items-center gap-3">
             <span className="text-3xl" aria-hidden>🆘</span>

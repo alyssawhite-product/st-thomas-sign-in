@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { getBrowserSupabase } from "@/lib/supabase";
 import type { QueueEntry, StaffRole } from "@/lib/types";
 import { DEPARTMENTS } from "@/lib/types";
@@ -54,34 +54,6 @@ function sortQueueOrder(a: QueueEntry, b: QueueEntry) {
   return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
 }
 
-// Distinct alarm-like chime for incoming Request Help alerts on the
-// pharmacy dashboard. Same waveform/sequence as the clinic one so
-// staff who hear it from elsewhere recognise it instantly.
-function playHelpAlertChime() {
-  try {
-    const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-    if (!Ctx) return;
-    const ctx = new Ctx();
-    const sequence = [880, 660, 880, 660, 880];
-    sequence.forEach((freq, i) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain);
-      gain.connect(ctx.destination);
-      osc.type = "square";
-      osc.frequency.value = freq;
-      const start = ctx.currentTime + i * 0.18;
-      gain.gain.setValueAtTime(0, start);
-      gain.gain.linearRampToValueAtTime(0.4, start + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.16);
-      osc.start(start);
-      osc.stop(start + 0.18);
-    });
-  } catch {
-    // Audio may be blocked until staff interacts; visual banner is the
-    // redundant alert.
-  }
-}
 
 export function PharmacyQueue({ initialEntries, email, role }: Props) {
   const [entries, setEntries] = useState<QueueEntry[]>(initialEntries);
@@ -165,18 +137,7 @@ export function PharmacyQueue({ initialEntries, email, role }: Props) {
     [entries],
   );
 
-  // Fire the alert chime once per new help request only.
-  const alertedHelpIdsRef = useRef<Set<string>>(new Set());
-  useEffect(() => {
-    let anyNew = false;
-    for (const e of helpRequesters) {
-      if (!alertedHelpIdsRef.current.has(e.id)) {
-        alertedHelpIdsRef.current.add(e.id);
-        anyNew = true;
-      }
-    }
-    if (anyNew) playHelpAlertChime();
-  }, [helpRequesters]);
+  // Visual banner only -- no audio.
 
   // Tab partitions
   const byTab: Record<Tab, QueueEntry[]> = useMemo(() => ({
@@ -204,11 +165,11 @@ export function PharmacyQueue({ initialEntries, email, role }: Props) {
         </form>
       </header>
 
-      {/* Help-request alert banner. Pulses red to grab attention. */}
+      {/* Help-request alert banner (solid red, no flash, no audio). */}
       {helpRequesters.length > 0 && (
         <div
           role="alert"
-          className="mb-6 animate-pulse rounded-xl border-2 border-red-500 bg-red-600 p-5 text-white shadow-lg"
+          className="mb-6 rounded-xl border-2 border-red-500 bg-red-600 p-5 text-white shadow-lg"
         >
           <div className="flex items-center gap-3">
             <span className="text-3xl" aria-hidden>🆘</span>

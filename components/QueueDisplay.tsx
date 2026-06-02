@@ -180,7 +180,9 @@ export function QueueDisplay({ initialEntries }: Props) {
   const announcedKeysRef = useRef<Set<string>>(
     new Set(
       initialEntries
-        .filter((e) => DISPLAY_ANNOUNCEABLE_STATUSES.includes(e.status))
+        .filter(
+          (e) => DISPLAY_ANNOUNCEABLE_STATUSES.includes(e.status) && !e.priority,
+        )
         .map((e) => `${e.id}:${e.status}`),
     ),
   );
@@ -226,8 +228,14 @@ export function QueueDisplay({ initialEntries }: Props) {
       // Announce on any new (id, status) pair for an announceable status.
       // This covers the initial call AND each sub-stage transition
       // (with_nurse, with_doctor).
+      //
+      // Priority entries are skipped: a patient who has been escalated
+      // via Urgent (or inserted via Priority Insert) is being retrieved
+      // in person, so they should NOT be called over the public
+      // address. Matches the banner filter at line 158.
       const newAnnouncements = fresh.filter((e) => {
         if (!DISPLAY_ANNOUNCEABLE_STATUSES.includes(e.status)) return false;
+        if (e.priority) return false;
         return !announcedKeysRef.current.has(`${e.id}:${e.status}`);
       });
 

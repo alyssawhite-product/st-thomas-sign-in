@@ -1401,52 +1401,17 @@ function buzzPhone() {
   }
 }
 
-// Y-batch: distinct alarm-like chime for the staff dashboards when a
-// patient presses Request Help. Square-wave so it sounds urgent, not
-// like the gentle patient chime. Fires once per (entry, request).
-const staffAlertedHelpIds = new Set();
-function playHelpAlertChime() {
-  try {
-    const Ctx = window.AudioContext || window.webkitAudioContext;
-    if (!Ctx) return;
-    const ctx = new Ctx();
-    [880, 660, 880, 660, 880].forEach((freq, i) => {
-      const osc = ctx.createOscillator();
-      const gain = ctx.createGain();
-      osc.connect(gain); gain.connect(ctx.destination);
-      osc.type = 'square';
-      osc.frequency.value = freq;
-      const start = ctx.currentTime + i * 0.18;
-      gain.gain.setValueAtTime(0, start);
-      gain.gain.linearRampToValueAtTime(0.4, start + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.16);
-      osc.start(start);
-      osc.stop(start + 0.18);
-    });
-  } catch (e) {
-    // Audio may be blocked until staff interacts; the banner is the
-    // redundant alert.
-  }
-}
-// Returns the markup for the pulsing red banner + fires the chime
-// for any newly-arrived requests. Call inside renderStaff /
-// renderPharmacy.
+// Z-batch: solid red help-request banner. No flashing, no audio --
+// staff feedback after Y-batch was that the chime was unreliable in
+// the browser and the pulse was visually distracting.
 function renderHelpAlertBanner(requesters) {
   if (!requesters || requesters.length === 0) return '';
-  let anyNew = false;
-  for (const e of requesters) {
-    if (!staffAlertedHelpIds.has(e.id)) {
-      staffAlertedHelpIds.add(e.id);
-      anyNew = true;
-    }
-  }
-  if (anyNew) playHelpAlertChime();
   const names = requesters.map(e => escapeHtml(e.name));
   const line = requesters.length === 1
     ? `${names[0]} has pressed Request Help.`
     : `${requesters.length} patients have pressed Request Help: ${names.join(', ')}.`;
   return `
-    <div role="alert" class="mb-6 animate-pulse rounded-xl border-2 border-red-500 bg-red-600 p-5 text-white shadow-lg">
+    <div role="alert" class="mb-6 rounded-xl border-2 border-red-500 bg-red-600 p-5 text-white shadow-lg">
       <div class="flex items-center gap-3">
         <span class="text-3xl" aria-hidden>🆘</span>
         <div class="flex-1">
@@ -1579,8 +1544,14 @@ function renderDisplay() {
 
   // Announce on new (id, status) pairs for any of called / with_nurse /
   // with_doctor. Initial state is pre-seeded so we don't replay on load.
+  //
+  // Z-batch: priority patients are skipped. Urgent escalations (via
+  // the Urgent button) and priority inserts are both retrieved in
+  // person -- the public display should not announce them. Matches
+  // the banner filter above.
   const newAnnouncements = state.entries.filter(e => {
     if (!DISPLAY_ANNOUNCEABLE.includes(e.status)) return false;
+    if (e.priority) return false;
     return !displayAnnouncedKeys.has(`${e.id}:${e.status}`);
   });
   if (newAnnouncements.length > 0 && displayAudioUnlocked) {
@@ -1589,7 +1560,7 @@ function renderDisplay() {
     setTimeout(() => newAnnouncements.forEach(announcePatient), 5500);
   }
   state.entries.forEach(e => {
-    if (DISPLAY_ANNOUNCEABLE.includes(e.status)) {
+    if (DISPLAY_ANNOUNCEABLE.includes(e.status) && !e.priority) {
       displayAnnouncedKeys.add(`${e.id}:${e.status}`);
     }
   });
