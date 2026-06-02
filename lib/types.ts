@@ -46,6 +46,9 @@ export interface QueueEntry {
   created_at: string;
   called_at: string | null;
   seen_at: string | null;
+  // Stamped when a patient presses Request Help on their phone. The
+  // clinic dashboard uses this to surface a 🆘 banner on the row.
+  help_requested_at?: string | null;
 }
 
 export interface StaffUser {

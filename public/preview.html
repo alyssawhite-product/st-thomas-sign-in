@@ -178,6 +178,21 @@
       </div>
     </div>
 
+    <!-- X-batch: patient-facing emergency button. If the patient's
+         condition is degrading while they wait, this alerts clinic
+         staff right away. Hidden after status=seen. -->
+    <div id="q-help-box" class="mt-6 hidden">
+      <div id="q-help-prompt" class="rounded-xl border-2 border-red-200 bg-white p-5 text-center">
+        <p class="text-sm font-semibold text-slate-700">Feeling worse while you wait?</p>
+        <p class="mt-1 text-sm text-slate-500">Press the button below and a nurse will be alerted right away.</p>
+        <button type="button" id="q-help-btn" class="mt-4 w-full rounded-xl bg-red-600 px-6 py-4 text-lg font-bold uppercase tracking-wider text-white shadow-lg hover:bg-red-700">🆘 Request help</button>
+      </div>
+      <div id="q-help-confirm" class="hidden rounded-xl border-2 border-red-300 bg-red-50 p-5 text-center">
+        <p class="text-sm font-semibold uppercase tracking-wide text-red-700">Help requested</p>
+        <p class="mt-1 text-red-900">Staff have been alerted. A nurse will come to you as soon as possible.</p>
+      </div>
+    </div>
+
     <p class="mt-8 text-sm text-slate-600">
       Take a seat in the waiting area. You will be called by name when it is your turn.
       If you have any questions, speak to a member of staff at the front desk and show
@@ -748,19 +763,38 @@ function priorityInsert({ name, idNumber, visitType, reason }) {
   });
   save();
 }
-// W-batch: escalate an EXISTING waiting patient. Different from
-// priorityInsert which creates a new entry. Flips priority=true and
-// stores the clinical reason so the row shows the red priority strip
-// and sort order moves them ahead of non-priority waiters.
-function setUrgent(id, reason) {
+// X-batch: one-click escalation. Flips priority AND jumps the patient
+// straight to "with_nurse" so the clinic dashboard surfaces them and
+// the public display calls them to the Nurse. Pharmacy entries get
+// moved into the clinical stream (new ticket number, transferred_from
+// stamped) because the Nurse sits in General Clinic.
+function setUrgent(id) {
   const entry = state.entries.find(e => e.id === id);
   if (!entry) return;
+  const wasPharmacy = entry.visit_type === 'pharmacy';
+  if (wasPharmacy) {
+    entry.transferred_from = entry.transferred_from || 'pharmacy';
+    entry.visit_type = 'general';
+    entry.ticket_number = state.nextTicketByStream.clinical++;
+  }
   entry.priority = true;
-  entry.priority_reason = (reason || '').trim() || null;
-  // Bump created_at backwards so the sort places them ahead of older
-  // non-priority waiters (matches priorityInsert behaviour).
-  entry.created_at = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+  entry.priority_reason = entry.priority_reason || 'Marked urgent — sent to nurse';
+  entry.status = 'with_nurse';
+  entry.called_at = new Date().toISOString();
   save();
+}
+
+// X-batch: patient-initiated help request. Flips priority and stamps
+// help_requested_at -- staff dashboard surfaces a 🆘 badge on the row
+// and triages from there. Does NOT auto-advance status.
+function requestHelp(token) {
+  const entry = state.entries.find(e => e.token === token);
+  if (!entry) return false;
+  entry.priority = true;
+  entry.priority_reason = 'Patient requested help — condition worsening';
+  entry.help_requested_at = new Date().toISOString();
+  save();
+  return true;
 }
 function resetDay() {
   state.entries = [];
@@ -1244,6 +1278,35 @@ function renderQueue() {
   }
   void ticketLine;  // reserved for future use; intentionally unused right now
 
+  // X-batch: Request help block. Visible any time the patient hasn't
+  // been seen yet. If they've already pressed it (help_requested_at
+  // set on this entry) we show the acknowledgement instead.
+  const helpBox = document.getElementById('q-help-box');
+  if (helpBox) {
+    if (entry.status === 'seen') {
+      helpBox.classList.add('hidden');
+    } else {
+      helpBox.classList.remove('hidden');
+      const promptEl = document.getElementById('q-help-prompt');
+      const confirmEl = document.getElementById('q-help-confirm');
+      if (entry.help_requested_at) {
+        promptEl.classList.add('hidden');
+        confirmEl.classList.remove('hidden');
+      } else {
+        promptEl.classList.remove('hidden');
+        confirmEl.classList.add('hidden');
+        const btn = document.getElementById('q-help-btn');
+        btn.onclick = () => {
+          if (!confirm('Are you feeling worse? Pressing this will alert clinic staff right away.')) return;
+          if (requestHelp(entry.token)) {
+            promptEl.classList.add('hidden');
+            confirmEl.classList.remove('hidden');
+          }
+        };
+      }
+    }
+  }
+
   // Patient-initiated transfer (restored after May 27 stakeholder meeting).
   if (transferBox) {
     if (entry.status === 'seen') {
@@ -1623,13 +1686,17 @@ function staffRow(e) {
       <button data-act="movetoggle" data-id="${e.id}" class="btn-secondary">Move to…</button>
       <div data-move-menu="${e.id}" class="absolute right-0 z-10 mt-1 w-44 rounded-md border border-slate-200 bg-white shadow-lg hidden">${moveOptions}</div>
     </div>` : '';
-  // W-batch: Mark urgent only meaningful while still waiting AND not
-  // already flagged priority. Once called we trust the clinician to use
-  // their stream-specific escalation path.
-  const urgentBlock = (e.status === 'waiting' && !e.priority)
-    ? `<button data-act="urgent" data-id="${e.id}" class="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-100">Mark urgent</button>`
+  const actions = `${primary}${moveBlock}`;
+  // X-batch: Urgent sits right next to the name, not in the actions
+  // column. One click → flips priority + jumps the patient straight to
+  // with_nurse (pharmacy entries are transferred into the clinical
+  // stream by setUrgent itself).
+  const urgentInline = (e.status === 'waiting' && !e.priority)
+    ? `<button data-act="urgent" data-id="${e.id}" class="rounded-md bg-red-600 px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider text-white shadow hover:bg-red-700" title="Mark urgent — automatically calls this patient to the Nurse">Urgent</button>`
     : '';
-  const actions = `${primary}${urgentBlock}${moveBlock}`;
+  const helpBadge = e.help_requested_at
+    ? `<span class="rounded-full bg-red-600 px-2 py-0.5 text-xs font-bold uppercase text-white" title="Patient pressed Request help on their phone">🆘 Help requested</span>`
+    : '';
   return `
     <li class="grid grid-cols-1 gap-3 p-4 sm:grid-cols-[3.5rem_1fr_auto] sm:items-center ${e.priority ? 'border-l-4 border-red-500 bg-red-50/40' : ''}">
       <div class="flex flex-col items-start">
@@ -1639,8 +1706,10 @@ function staffRow(e) {
       <div>
         <div class="flex flex-wrap items-center gap-2">
           <span class="text-lg font-semibold">${escapeHtml(e.name)}</span>
+          ${urgentInline}
           <span class="rounded-full px-2 py-0.5 text-xs font-semibold uppercase ${statusBadge}">${statusLabel(e.status)}</span>
           ${e.priority ? `<span class="rounded-full bg-red-600 px-2 py-0.5 text-xs font-bold uppercase text-white">Priority</span>` : ''}
+          ${helpBadge}
           ${e.transferred_from ? `<span class="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-medium text-slate-700">← ${e.transferred_from}</span>` : ''}
         </div>
         <p class="mt-1 text-sm text-slate-500">
@@ -1674,11 +1743,10 @@ function wireStaffRowButtons() {
       else if (act === 'with-doctor') setClinicStage(id, 'with_doctor');
       else if (act === 'seen') markSeen(id);
       else if (act === 'urgent') {
-        // W-batch: escalate existing waiter. We require a brief reason so
-        // there's an audit trail for who jumped the queue and why.
-        const reason = window.prompt('Mark this patient urgent? Enter a brief clinical reason:', 'Clinically urgent');
-        if (!reason) return;
-        setUrgent(id, reason);
+        // X-batch: one-click. Confirm only — no reason prompt. Jumps
+        // patient straight to with_nurse so the clinic sees them now.
+        if (!confirm('Mark this patient urgent and call them to the Nurse now?')) return;
+        setUrgent(id);
       }
       else if (act === 'movetoggle') {
         const menu = document.querySelector(`[data-move-menu="${id}"]`);
@@ -1800,12 +1868,16 @@ function pharmRow(e) {
       <button data-pact="movetoggle" data-id="${e.id}" class="btn-secondary">Move to…</button>
       <div data-pmove="${e.id}" class="absolute right-0 z-10 mt-1 w-44 rounded-md border border-slate-200 bg-white shadow-lg hidden">${moveOptions}</div>
     </div>`;
-  // W-batch: Mark urgent on waiting pharmacy patients (e.g. patient
-  // brings in a critical script, suspected adverse interaction, etc.).
-  const urgentBlock = (e.status === 'waiting' && !e.priority)
-    ? `<button data-pact="urgent" data-id="${e.id}" class="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-100">Mark urgent</button>`
+  const action = `${primaryAction}${moveBlock}`;
+  // X-batch: Urgent inline next to name; on click, transfers the
+  // pharmacy patient into the clinical stream and calls them straight
+  // to the Nurse (see setUrgent).
+  const urgentInline = (e.status === 'waiting' && !e.priority)
+    ? `<button data-pact="urgent" data-id="${e.id}" class="rounded-md bg-red-600 px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider text-white shadow hover:bg-red-700" title="Mark urgent — escalates this patient to the Clinic Nurse">Urgent</button>`
     : '';
-  const action = `${primaryAction}${urgentBlock}${moveBlock}`;
+  const helpBadge = e.help_requested_at
+    ? `<span class="rounded-full bg-red-600 px-2 py-0.5 text-xs font-bold uppercase text-white" title="Patient pressed Request help on their phone">🆘 Help requested</span>`
+    : '';
   // Notes editor only after interaction starts (called/preparing).
   const notesBlock = e.status === 'waiting' ? '' : `
       <div class="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3">
@@ -1820,8 +1892,10 @@ function pharmRow(e) {
       <div class="flex flex-wrap items-center gap-3">
         <span class="text-2xl font-bold text-emerald-700">#${e.ticket_number ?? '—'}</span>
         <span class="text-lg font-semibold">${escapeHtml(e.name)}</span>
+        ${urgentInline}
         <span class="rounded-full px-2 py-0.5 text-xs font-semibold uppercase ${statusBadge}">${e.status}</span>
         ${e.priority ? `<span class="rounded-full bg-red-600 px-2 py-0.5 text-xs font-bold uppercase text-white">Priority</span>` : ''}
+        ${helpBadge}
         ${e.transferred_from ? `<span class="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-medium text-slate-700">← ${e.transferred_from}</span>` : ''}
       </div>
       <p class="mt-1 text-sm text-slate-500">${e.id_type === 'passport' ? 'Passport' : 'National ID'}: <span class="font-medium text-slate-700">${escapeHtml(e.id_number)}</span> · Ref: <span class="font-mono tracking-widest">${e.token}</span> · Arrived ${fmtTime(e.created_at)} · ${waitMinutes(e.created_at)} min waiting</p>
@@ -1839,9 +1913,8 @@ function wirePharmRowButtons() {
       else if (act === 'prep') setPreparing(id);
       else if (act === 'seen') markSeen(id);
       else if (act === 'urgent') {
-        const reason = window.prompt('Mark this patient urgent? Enter a brief clinical reason:', 'Clinically urgent');
-        if (!reason) return;
-        setUrgent(id, reason);
+        if (!confirm('Mark urgent? Patient will be moved to the Clinic Nurse immediately.')) return;
+        setUrgent(id);
       }
       else if (act === 'movetoggle') {
         const menu = document.querySelector(`[data-pmove="${id}"]`);

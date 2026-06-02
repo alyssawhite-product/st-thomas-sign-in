@@ -138,18 +138,12 @@ export function StaffQueue({ initialEntries, role, email }: Props) {
     setOpenMoveFor(null);
   }
 
-  // Escalate an existing waiting patient. Reason is mandatory (audit
-  // trail). Prompt is the lightest-weight UX -- staff feedback will
-  // tell us if a richer dialog is warranted.
+  // One-click escalation: flips priority and jumps the patient
+  // straight to "with nurse" so a clinician sees them now.
   function handleMarkUrgent(id: string) {
-    const reason = window.prompt(
-      "Mark this patient urgent? Enter a brief clinical reason:",
-      "Clinically urgent",
-    );
-    if (!reason) return;
+    if (!window.confirm("Mark this patient urgent and call them to the Nurse now?")) return;
     const fd = new FormData();
     fd.set("id", id);
-    fd.set("reason", reason);
     startTransition(() => setUrgentAction(fd));
   }
 
@@ -264,6 +258,21 @@ export function StaffQueue({ initialEntries, role, email }: Props) {
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="text-lg font-semibold">{e.name}</span>
+                      {/* Urgent sits right next to the name so it's the
+                          first thing a clinician reaches for if the
+                          patient deteriorates while waiting. One click =
+                          flips priority + calls them to the Nurse. */}
+                      {e.status === "waiting" && !e.priority && (
+                        <button
+                          type="button"
+                          disabled={pending}
+                          onClick={() => handleMarkUrgent(e.id)}
+                          className="rounded-md bg-red-600 px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider text-white shadow hover:bg-red-700 disabled:opacity-50"
+                          title="Mark urgent — automatically calls this patient to the Nurse"
+                        >
+                          Urgent
+                        </button>
+                      )}
                       <span
                         className={`rounded-full px-2 py-0.5 text-xs font-semibold uppercase ${statusBadge(e.status)}`}
                       >
@@ -272,6 +281,14 @@ export function StaffQueue({ initialEntries, role, email }: Props) {
                       {e.priority && (
                         <span className="rounded-full bg-red-600 px-2 py-0.5 text-xs font-bold uppercase text-white">
                           Priority
+                        </span>
+                      )}
+                      {(e as { help_requested_at?: string | null }).help_requested_at && (
+                        <span
+                          className="rounded-full bg-red-600 px-2 py-0.5 text-xs font-bold uppercase text-white"
+                          title="Patient pressed Request help on their phone"
+                        >
+                          🆘 Help requested
                         </span>
                       )}
                       {e.transferred_from && (
@@ -297,27 +314,14 @@ export function StaffQueue({ initialEntries, role, email }: Props) {
                         sub-stages: Call -> Mark at records -> Send to nurse
                         -> Send to doctor -> Mark seen. */}
                     {e.status === "waiting" && (
-                      <>
-                        <button
-                          type="button"
-                          className="btn-primary"
-                          disabled={pending}
-                          onClick={() => submitAction(callPatientAction, e.id)}
-                        >
-                          Call
-                        </button>
-                        {!e.priority && (
-                          <button
-                            type="button"
-                            className="rounded-lg border border-red-500 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
-                            disabled={pending}
-                            onClick={() => handleMarkUrgent(e.id)}
-                            title="Mark this patient urgent and jump to the front of the queue"
-                          >
-                            Mark urgent
-                          </button>
-                        )}
-                      </>
+                      <button
+                        type="button"
+                        className="btn-primary"
+                        disabled={pending}
+                        onClick={() => submitAction(callPatientAction, e.id)}
+                      >
+                        Call
+                      </button>
                     )}
                     {e.status === "called" && (
                       <button

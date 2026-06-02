@@ -10,6 +10,7 @@ import {
   getEntryByToken,
   markSeen,
   priorityInsert,
+  requestHelp,
   resetToday,
   setAtRecords,
   setPharmacyNote,
@@ -190,16 +191,28 @@ export async function setWithDoctorAction(formData: FormData): Promise<void> {
   revalidatePath("/staff");
 }
 
-// Escalate an existing waiting patient to the front of the queue.
+// One-click clinician escalation: flips priority and jumps the patient
+// straight to with_nurse. Pharmacy entries are transferred into the
+// clinical stream as part of the same call (see lib/queue.ts).
 export async function setUrgentAction(formData: FormData): Promise<void> {
   const session = await requireStaffRole(["clinician", "pharmacist", "admin"]);
   const id = String(formData.get("id") ?? "");
-  const reason = String(formData.get("reason") ?? "").trim();
   if (!id) throw new Error("Missing id");
-  if (!reason) throw new Error("REASON_REQUIRED");
-  await setUrgent(id, reason, actorFromSession(session));
+  await setUrgent(id, actorFromSession(session));
   revalidatePath("/staff");
   revalidatePath("/pharmacy");
+}
+
+// Patient self-service: presses Request Help on their phone. Token in
+// hand is the only auth needed. Flags the entry priority + stamps
+// help_requested_at; staff triage from there.
+export async function requestHelpAction(formData: FormData): Promise<void> {
+  const token = String(formData.get("token") ?? "").trim();
+  if (!token) throw new Error("Missing token");
+  await requestHelp(token);
+  revalidatePath("/staff");
+  revalidatePath("/pharmacy");
+  revalidatePath(`/queue/${token}`);
 }
 
 export async function savePharmacyNoteAction(formData: FormData): Promise<void> {

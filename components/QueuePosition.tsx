@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { getBrowserSupabase } from "@/lib/supabase";
 import type { QueueEntry, QueueStatus } from "@/lib/types";
 import { DEPARTMENTS, streamFor } from "@/lib/types";
-import { patientTransferAction } from "@/app/actions";
+import { patientTransferAction, requestHelpAction } from "@/app/actions";
 
 const AVG_MINUTES_PER_PATIENT = 8;
 const KIOSK_TIMEOUT_SECONDS = 10;
@@ -187,6 +187,10 @@ export function QueuePosition({ initialEntry, initialAhead }: Props) {
     state.status === "with_doctor" ||
     state.status === "preparing";
 
+  const helpRequested = Boolean(
+    (initialEntry as { help_requested_at?: string | null }).help_requested_at,
+  );
+
   if (inProgress) {
     const myStream = streamFor(state.visitType);
     // Headline + body copy adapt to the current sub-stage so the patient
@@ -239,6 +243,7 @@ export function QueuePosition({ initialEntry, initialAhead }: Props) {
             <h2 className="mt-3 text-2xl font-bold text-amber-900">{bodyLine}</h2>
           )}
         </section>
+        <RequestHelpButton token={initialEntry.token} alreadyRequested={helpRequested} />
         {kioskBanner}
       </>
     );
@@ -288,8 +293,77 @@ export function QueuePosition({ initialEntry, initialAhead }: Props) {
         )}
       </section>
       <TransferForm token={initialEntry.token} currentVisitType={state.visitType} />
+      <RequestHelpButton token={initialEntry.token} alreadyRequested={helpRequested} />
       {kioskBanner}
     </>
+  );
+}
+
+// Patient-facing emergency button. Confirm once (rules out fat-finger
+// taps in a noisy waiting room), then flips priority + stamps
+// help_requested_at via the server action. On success we show an
+// acknowledgement and disable the button.
+function RequestHelpButton({
+  token,
+  alreadyRequested,
+}: {
+  token: string;
+  alreadyRequested: boolean;
+}) {
+  const [pending, startTransition] = useTransition();
+  const [requested, setRequested] = useState(alreadyRequested);
+  const [error, setError] = useState<string | null>(null);
+
+  function onClick() {
+    if (
+      !window.confirm(
+        "Are you feeling worse? Pressing this will alert clinic staff right away.",
+      )
+    ) {
+      return;
+    }
+    setError(null);
+    const fd = new FormData();
+    fd.set("token", token);
+    startTransition(async () => {
+      try {
+        await requestHelpAction(fd);
+        setRequested(true);
+      } catch {
+        setError("Could not send. Please try again, or ask the staff in person.");
+      }
+    });
+  }
+
+  if (requested) {
+    return (
+      <section className="mt-6 rounded-xl border-2 border-red-300 bg-red-50 p-5 text-center">
+        <p className="text-sm font-semibold uppercase tracking-wide text-red-700">
+          Help requested
+        </p>
+        <p className="mt-1 text-red-900">
+          Staff have been alerted. A nurse will come to you as soon as possible.
+        </p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="mt-6 rounded-xl border-2 border-red-200 bg-white p-5 text-center">
+      <p className="text-sm font-semibold text-slate-700">Feeling worse while you wait?</p>
+      <p className="mt-1 text-sm text-slate-500">
+        Press the button below and a nurse will be alerted right away.
+      </p>
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={pending}
+        className="mt-4 w-full rounded-xl bg-red-600 px-6 py-4 text-lg font-bold uppercase tracking-wider text-white shadow-lg hover:bg-red-700 disabled:opacity-50"
+      >
+        🆘 Request help
+      </button>
+      {error && <p className="mt-2 text-sm text-red-700">{error}</p>}
+    </section>
   );
 }
 
