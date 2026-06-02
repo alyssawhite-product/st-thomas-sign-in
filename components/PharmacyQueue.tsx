@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import { getBrowserSupabase } from "@/lib/supabase";
 import type { QueueEntry, StaffRole } from "@/lib/types";
 import { DEPARTMENTS } from "@/lib/types";
@@ -52,6 +52,35 @@ function statusBadgeClass(status: string) {
 function sortQueueOrder(a: QueueEntry, b: QueueEntry) {
   if (a.priority !== b.priority) return a.priority ? -1 : 1;
   return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+}
+
+// Distinct alarm-like chime for incoming Request Help alerts on the
+// pharmacy dashboard. Same waveform/sequence as the clinic one so
+// staff who hear it from elsewhere recognise it instantly.
+function playHelpAlertChime() {
+  try {
+    const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    const sequence = [880, 660, 880, 660, 880];
+    sequence.forEach((freq, i) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.type = "square";
+      osc.frequency.value = freq;
+      const start = ctx.currentTime + i * 0.18;
+      gain.gain.setValueAtTime(0, start);
+      gain.gain.linearRampToValueAtTime(0.4, start + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.16);
+      osc.start(start);
+      osc.stop(start + 0.18);
+    });
+  } catch {
+    // Audio may be blocked until staff interacts; visual banner is the
+    // redundant alert.
+  }
 }
 
 export function PharmacyQueue({ initialEntries, email, role }: Props) {
@@ -123,6 +152,32 @@ export function PharmacyQueue({ initialEntries, email, role }: Props) {
     served: entries.filter((e) => e.status === "seen").length,
   }), [entries]);
 
+  // Pharmacy patients who have pressed Request Help. The banner clears
+  // automatically once staff acts (call / mark urgent moves them out
+  // of "waiting").
+  const helpRequesters = useMemo(
+    () =>
+      entries.filter(
+        (e) =>
+          (e as { help_requested_at?: string | null }).help_requested_at &&
+          e.status === "waiting",
+      ),
+    [entries],
+  );
+
+  // Fire the alert chime once per new help request only.
+  const alertedHelpIdsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    let anyNew = false;
+    for (const e of helpRequesters) {
+      if (!alertedHelpIdsRef.current.has(e.id)) {
+        alertedHelpIdsRef.current.add(e.id);
+        anyNew = true;
+      }
+    }
+    if (anyNew) playHelpAlertChime();
+  }, [helpRequesters]);
+
   // Tab partitions
   const byTab: Record<Tab, QueueEntry[]> = useMemo(() => ({
     waiting: entries.filter((e) => e.status === "waiting").sort(sortQueueOrder),
@@ -148,6 +203,31 @@ export function PharmacyQueue({ initialEntries, email, role }: Props) {
           <button type="submit" className="btn-secondary">Sign out</button>
         </form>
       </header>
+
+      {/* Help-request alert banner. Pulses red to grab attention. */}
+      {helpRequesters.length > 0 && (
+        <div
+          role="alert"
+          className="mb-6 animate-pulse rounded-xl border-2 border-red-500 bg-red-600 p-5 text-white shadow-lg"
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-3xl" aria-hidden>🆘</span>
+            <div className="flex-1">
+              <p className="text-sm font-bold uppercase tracking-wider">
+                Help requested
+              </p>
+              <p className="mt-1 text-lg font-semibold">
+                {helpRequesters.length === 1
+                  ? `${helpRequesters[0].name} has pressed Request Help.`
+                  : `${helpRequesters.length} patients have pressed Request Help: ${helpRequesters.map((e) => e.name).join(", ")}.`}
+              </p>
+              <p className="mt-1 text-sm text-red-100">
+                Reach the patient now, then Call or Mark urgent to clear this alert.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-3 gap-4 text-center mb-6">
         <Stat label="Waiting" value={stats.waiting} />
