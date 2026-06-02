@@ -786,15 +786,25 @@ function setUrgent(id) {
   save();
 }
 
-// X-batch: patient-initiated help request. Flips priority and stamps
-// help_requested_at -- staff dashboard surfaces a 🆘 badge on the row
-// and triages from there. Does NOT auto-advance status.
+// AA-batch: patient-initiated help request is a self-service Urgent
+// escalation. Fast-tracks the patient straight to with_nurse so a
+// nurse is dispatched to them; pharmacy entries transfer into the
+// clinical stream as part of the same call. PA stays silent (display
+// filters priority entries).
 function requestHelp(token) {
   const entry = state.entries.find(e => e.token === token);
   if (!entry) return false;
+  const wasPharmacy = entry.visit_type === 'pharmacy';
+  if (wasPharmacy) {
+    entry.transferred_from = entry.transferred_from || 'pharmacy';
+    entry.visit_type = 'general';
+    entry.ticket_number = state.nextTicketByStream.clinical++;
+  }
   entry.priority = true;
   entry.priority_reason = 'Patient requested help — condition worsening';
   entry.help_requested_at = new Date().toISOString();
+  entry.status = 'with_nurse';
+  entry.called_at = new Date().toISOString();
   save();
   return true;
 }
@@ -1233,7 +1243,13 @@ function renderQueue() {
   if (inProgress) {
     // Headline + body adapt to the current sub-stage.
     let headline, bodyLine;
-    if (stream === 'pharmacy') {
+    // AA-batch: help-requested fast-track. Patient stays seated and a
+    // nurse comes to them; override the default "Please go to the
+    // Nurse" so they don't get up.
+    if (entry.help_requested_at && entry.status === 'with_nurse') {
+      headline = 'A nurse is on the way to you';
+      bodyLine = 'Please stay seated. A nurse will come to check on you.';
+    } else if (stream === 'pharmacy') {
       if (entry.status === 'preparing') {
         headline = 'Pharmacist is preparing your order';
         bodyLine = 'Please wait near the pharmacy window';
@@ -1401,15 +1417,15 @@ function buzzPhone() {
   }
 }
 
-// Z-batch: solid red help-request banner. No flashing, no audio --
-// staff feedback after Y-batch was that the chime was unreliable in
-// the browser and the pulse was visually distracting.
+// AA-batch: solid red help-request banner. Patient was fast-tracked
+// to with_nurse on request -- the banner tells the nurse to GO to
+// them (they're still in the waiting area).
 function renderHelpAlertBanner(requesters) {
   if (!requesters || requesters.length === 0) return '';
   const names = requesters.map(e => escapeHtml(e.name));
   const line = requesters.length === 1
-    ? `${names[0]} has pressed Request Help.`
-    : `${requesters.length} patients have pressed Request Help: ${names.join(', ')}.`;
+    ? `${names[0]} pressed Request Help — go to them now.`
+    : `${requesters.length} patients pressed Request Help — go to them now: ${names.join(', ')}.`;
   return `
     <div role="alert" class="mb-6 rounded-xl border-2 border-red-500 bg-red-600 p-5 text-white shadow-lg">
       <div class="flex items-center gap-3">
@@ -1417,7 +1433,7 @@ function renderHelpAlertBanner(requesters) {
         <div class="flex-1">
           <p class="text-sm font-bold uppercase tracking-wider">Help requested</p>
           <p class="mt-1 text-lg font-semibold">${line}</p>
-          <p class="mt-1 text-sm text-red-100">Reach the patient now, then Call or Mark urgent to clear this alert.</p>
+          <p class="mt-1 text-sm text-red-100">Check on the patient, then Send to doctor or Mark seen to clear this alert.</p>
         </div>
       </div>
     </div>`;
@@ -1632,9 +1648,10 @@ function renderStaff() {
   // Clinic dashboard is scoped to the clinical stream only. Pharmacy
   // entries are handled exclusively on /pharmacy.
   const clinicalEntries = state.entries.filter(e => streamFor(e.visit_type) === 'clinical');
-  // Y-batch: patients who pressed Request Help and are still waiting.
-  // Banner pulses + audio chime fires once per new request.
-  const helpRequesters = clinicalEntries.filter(e => e.help_requested_at && e.status === 'waiting');
+  // AA-batch: patients who pressed Request Help are fast-tracked to
+  // with_nurse; the banner appears the moment that lands and clears
+  // when the nurse advances them (Send to doctor / Mark seen).
+  const helpRequesters = clinicalEntries.filter(e => e.help_requested_at && e.status === 'with_nurse');
   document.getElementById('staff-help-banner').innerHTML = renderHelpAlertBanner(helpRequesters);
   const stats = {
     waiting: clinicalEntries.filter(e => e.status === 'waiting').length,
@@ -1823,9 +1840,10 @@ function renderPharmacy() {
   if (!state.staff || (state.staff.role !== 'pharmacist' && state.staff.role !== 'admin')) return;
   document.getElementById('pharm-whoami').textContent = `Signed in as ${state.staff.email} (${state.staff.role})`;
   const list = state.entries.filter(e => e.visit_type === 'pharmacy').sort(sortQueueOrder);
-  // Y-batch: pharmacy patients who pressed Request Help while still
-  // waiting. Same banner + chime as the clinic dashboard.
-  const helpRequesters = list.filter(e => e.help_requested_at && e.status === 'waiting');
+  // AA-batch: in practice requestHelp transfers pharmacy patients
+  // into the clinical stream, so this list is usually empty -- but
+  // mirrored here for any race/edge case.
+  const helpRequesters = list.filter(e => e.help_requested_at && e.status === 'with_nurse');
   document.getElementById('pharm-help-banner').innerHTML = renderHelpAlertBanner(helpRequesters);
   const stats = {
     waiting: list.filter(e => e.status === 'waiting').length,

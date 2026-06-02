@@ -124,15 +124,16 @@ export function PharmacyQueue({ initialEntries, email, role }: Props) {
     served: entries.filter((e) => e.status === "seen").length,
   }), [entries]);
 
-  // Pharmacy patients who have pressed Request Help. The banner clears
-  // automatically once staff acts (call / mark urgent moves them out
-  // of "waiting").
+  // Pharmacy patients who pressed Request Help. In practice this list
+  // is usually empty because requestHelp() transfers them to the
+  // clinical stream, but the filter mirrors the clinic dashboard for
+  // any window-of-race where the row is still seen as pharmacy.
   const helpRequesters = useMemo(
     () =>
       entries.filter(
         (e) =>
           (e as { help_requested_at?: string | null }).help_requested_at &&
-          e.status === "waiting",
+          e.status === "with_nurse",
       ),
     [entries],
   );
@@ -179,11 +180,11 @@ export function PharmacyQueue({ initialEntries, email, role }: Props) {
               </p>
               <p className="mt-1 text-lg font-semibold">
                 {helpRequesters.length === 1
-                  ? `${helpRequesters[0].name} has pressed Request Help.`
-                  : `${helpRequesters.length} patients have pressed Request Help: ${helpRequesters.map((e) => e.name).join(", ")}.`}
+                  ? `${helpRequesters[0].name} pressed Request Help — go to them now.`
+                  : `${helpRequesters.length} patients pressed Request Help — go to them now.`}
               </p>
               <p className="mt-1 text-sm text-red-100">
-                Reach the patient now, then Call or Mark urgent to clear this alert.
+                Check on the patient, then Send to doctor or Mark seen to clear this alert.
               </p>
             </div>
           </div>

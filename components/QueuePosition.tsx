@@ -58,6 +58,7 @@ interface State {
   visitType: string;
   ticketNumber: number | null;
   createdAt: string;
+  helpRequestedAt: string | null;
 }
 
 export function QueuePosition({ initialEntry, initialAhead }: Props) {
@@ -68,6 +69,8 @@ export function QueuePosition({ initialEntry, initialAhead }: Props) {
     visitType: initialEntry.visit_type,
     ticketNumber: initialEntry.ticket_number,
     createdAt: initialEntry.created_at,
+    helpRequestedAt:
+      (initialEntry as { help_requested_at?: string | null }).help_requested_at ?? null,
   });
   const [kioskSecondsLeft, setKioskSecondsLeft] = useState<number | null>(null);
   // Track the last status we notified on so the chime + buzz fires once
@@ -122,7 +125,7 @@ export function QueuePosition({ initialEntry, initialAhead }: Props) {
 
       const { data: meRow } = await supabase
         .from("queue_entries")
-        .select("status, created_at, visit_type, ticket_number")
+        .select("status, created_at, visit_type, ticket_number, help_requested_at")
         .eq("id", initialEntry.id)
         .maybeSingle();
 
@@ -150,6 +153,7 @@ export function QueuePosition({ initialEntry, initialAhead }: Props) {
         visitType: meRow.visit_type as string,
         ticketNumber: (meRow.ticket_number as number | null) ?? null,
         createdAt: meRow.created_at as string,
+        helpRequestedAt: (meRow.help_requested_at as string | null) ?? null,
       });
     }
 
@@ -187,9 +191,7 @@ export function QueuePosition({ initialEntry, initialAhead }: Props) {
     state.status === "with_doctor" ||
     state.status === "preparing";
 
-  const helpRequested = Boolean(
-    (initialEntry as { help_requested_at?: string | null }).help_requested_at,
-  );
+  const helpRequested = Boolean(state.helpRequestedAt);
 
   if (inProgress) {
     const myStream = streamFor(state.visitType);
@@ -197,7 +199,14 @@ export function QueuePosition({ initialEntry, initialAhead }: Props) {
     // always knows where to go (or where they are).
     let headline: string;
     let bodyLine: string;
-    if (myStream === "pharmacy") {
+    // Help-requested fast-track: patient pressed Request Help and was
+    // auto-escalated to with_nurse. They stay seated -- a nurse comes
+    // to them. Override the normal "Please go to the Nurse" copy so
+    // they don't get up.
+    if (helpRequested && state.status === "with_nurse") {
+      headline = "A nurse is on the way to you";
+      bodyLine = "Please stay seated. A nurse will come to check on you.";
+    } else if (myStream === "pharmacy") {
       if (state.status === "preparing") {
         headline = "Pharmacist is preparing your order";
         bodyLine = "Please wait near the pharmacy window";

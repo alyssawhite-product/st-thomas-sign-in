@@ -108,16 +108,16 @@ export function StaffQueue({ initialEntries, role, email }: Props) {
     [entries],
   );
 
-  // Patients who have pressed Request Help on their phone and are
-  // still in the waiting list. Once a clinician calls / marks urgent,
-  // they're no longer "outstanding" -- the banner clears even though
-  // the 🆘 badge stays on the row for context.
+  // Patients who have pressed Request Help. requestHelp() fast-tracks
+  // them straight to with_nurse so a nurse is dispatched. Banner
+  // appears the moment the request lands and clears once the nurse
+  // moves them on (Send to doctor / Mark seen).
   const helpRequesters = useMemo(
     () =>
       clinicalEntries.filter(
         (e) =>
           (e as { help_requested_at?: string | null }).help_requested_at &&
-          e.status === "waiting",
+          e.status === "with_nurse",
       ),
     [clinicalEntries],
   );
@@ -204,11 +204,11 @@ export function StaffQueue({ initialEntries, role, email }: Props) {
               </p>
               <p className="mt-1 text-lg font-semibold">
                 {helpRequesters.length === 1
-                  ? `${helpRequesters[0].name} has pressed Request Help.`
-                  : `${helpRequesters.length} patients have pressed Request Help: ${helpRequesters.map((e) => e.name).join(", ")}.`}
+                  ? `${helpRequesters[0].name} pressed Request Help — go to them now.`
+                  : `${helpRequesters.length} patients pressed Request Help — go to them now: ${helpRequesters.map((e) => e.name).join(", ")}.`}
               </p>
               <p className="mt-1 text-sm text-red-100">
-                Reach the patient now, then Call or Mark urgent to clear this alert.
+                Check on the patient, then Send to doctor or Mark seen to clear this alert.
               </p>
             </div>
           </div>

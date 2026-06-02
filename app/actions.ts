@@ -204,14 +204,15 @@ export async function setUrgentAction(formData: FormData): Promise<void> {
 }
 
 // Patient self-service: presses Request Help on their phone. Token in
-// hand is the only auth needed. Flags the entry priority + stamps
-// help_requested_at; staff triage from there.
+// hand is the only auth needed. Fast-tracks to with_nurse so a nurse
+// is dispatched immediately (see lib/queue.ts requestHelp).
 export async function requestHelpAction(formData: FormData): Promise<void> {
   const token = String(formData.get("token") ?? "").trim();
   if (!token) throw new Error("Missing token");
   await requestHelp(token);
   revalidatePath("/staff");
   revalidatePath("/pharmacy");
+  revalidatePath("/display");
   revalidatePath(`/queue/${token}`);
 }
 

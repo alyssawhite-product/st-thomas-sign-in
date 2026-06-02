@@ -394,38 +394,66 @@ export async function setUrgent(
   });
 }
 
-// Patient-initiated help request. The patient is in possession of
-// their queue token, which is enough authentication. We flip priority
-// and stamp help_requested_at + reason, but do NOT auto-advance them
-// to with_nurse -- staff still triage. The clinic dashboard surfaces
-// the request with a visible red banner on the row.
+// Patient-initiated help request. Token-in-hand is the patient's
+// authentication. Functions as a self-service Urgent escalation:
+// priority=true, jumps the patient straight to "with_nurse" so a
+// nurse comes to check on them, and stamps help_requested_at so the
+// clinic dashboard surfaces a red banner. Pharmacy entries are
+// transferred into the clinical stream as part of the same call.
+//
+// Flow: Request help → Nurse checks on patient → Send to doctor.
+// No public PA call: the priority flag silences the announcement
+// (see QueueDisplay).
 export async function requestHelp(token: string): Promise<void> {
   const supabase = getServerSupabase();
   const { data: entry } = await supabase
     .from("queue_entries")
-    .select("id")
+    .select("id, visit_type, transferred_from")
     .eq("token", token)
     .maybeSingle();
   if (!entry) throw new Error("Entry not found");
 
   const id = entry.id as string;
   const now = new Date().toISOString();
-  const { error } = await supabase
-    .from("queue_entries")
-    .update({
-      priority: true,
-      priority_reason: "Patient requested help — condition worsening",
-      help_requested_at: now,
-    })
-    .eq("id", id);
-  if (error) throw error;
+  const wasPharmacy = (entry.visit_type as string) === "pharmacy";
+  const reason = "Patient requested help — condition worsening";
+
+  if (wasPharmacy) {
+    const newTicket = await nextTicketNumber("clinical");
+    const { error } = await supabase
+      .from("queue_entries")
+      .update({
+        visit_type: "general",
+        ticket_number: newTicket,
+        transferred_from: (entry.transferred_from as string | null) ?? "pharmacy",
+        status: "with_nurse",
+        called_at: now,
+        priority: true,
+        priority_reason: reason,
+        help_requested_at: now,
+      })
+      .eq("id", id);
+    if (error) throw error;
+  } else {
+    const { error } = await supabase
+      .from("queue_entries")
+      .update({
+        status: "with_nurse",
+        called_at: now,
+        priority: true,
+        priority_reason: reason,
+        help_requested_at: now,
+      })
+      .eq("id", id);
+    if (error) throw error;
+  }
 
   await writeAudit({
     entry_id: id,
     actor_id: null,
     actor_label: `patient:${token}`,
     action: "priority_insert",
-    detail: { escalated: true, via: "patient_help" },
+    detail: { escalated: true, via: "patient_help", fromPharmacy: wasPharmacy },
   });
 }
 
