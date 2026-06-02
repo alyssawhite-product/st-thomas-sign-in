@@ -733,6 +733,20 @@ function priorityInsert({ name, idNumber, visitType, reason }) {
   });
   save();
 }
+// W-batch: escalate an EXISTING waiting patient. Different from
+// priorityInsert which creates a new entry. Flips priority=true and
+// stores the clinical reason so the row shows the red priority strip
+// and sort order moves them ahead of non-priority waiters.
+function setUrgent(id, reason) {
+  const entry = state.entries.find(e => e.id === id);
+  if (!entry) return;
+  entry.priority = true;
+  entry.priority_reason = (reason || '').trim() || null;
+  // Bump created_at backwards so the sort places them ahead of older
+  // non-priority waiters (matches priorityInsert behaviour).
+  entry.created_at = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
+  save();
+}
 function resetDay() {
   state.entries = [];
   state.nextTicketByStream = { clinical: 1, pharmacy: 1 };
@@ -1594,7 +1608,13 @@ function staffRow(e) {
       <button data-act="movetoggle" data-id="${e.id}" class="btn-secondary">Move to…</button>
       <div data-move-menu="${e.id}" class="absolute right-0 z-10 mt-1 w-44 rounded-md border border-slate-200 bg-white shadow-lg hidden">${moveOptions}</div>
     </div>` : '';
-  const actions = `${primary}${moveBlock}`;
+  // W-batch: Mark urgent only meaningful while still waiting AND not
+  // already flagged priority. Once called we trust the clinician to use
+  // their stream-specific escalation path.
+  const urgentBlock = (e.status === 'waiting' && !e.priority)
+    ? `<button data-act="urgent" data-id="${e.id}" class="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-100">Mark urgent</button>`
+    : '';
+  const actions = `${primary}${urgentBlock}${moveBlock}`;
   return `
     <li class="grid grid-cols-1 gap-3 p-4 sm:grid-cols-[3.5rem_1fr_auto] sm:items-center ${e.priority ? 'border-l-4 border-red-500 bg-red-50/40' : ''}">
       <div class="flex flex-col items-start">
@@ -1638,6 +1658,13 @@ function wireStaffRowButtons() {
       else if (act === 'with-nurse') setClinicStage(id, 'with_nurse');
       else if (act === 'with-doctor') setClinicStage(id, 'with_doctor');
       else if (act === 'seen') markSeen(id);
+      else if (act === 'urgent') {
+        // W-batch: escalate existing waiter. We require a brief reason so
+        // there's an audit trail for who jumped the queue and why.
+        const reason = window.prompt('Mark this patient urgent? Enter a brief clinical reason:', 'Clinically urgent');
+        if (!reason) return;
+        setUrgent(id, reason);
+      }
       else if (act === 'movetoggle') {
         const menu = document.querySelector(`[data-move-menu="${id}"]`);
         if (menu) menu.classList.toggle('hidden');
@@ -1758,7 +1785,12 @@ function pharmRow(e) {
       <button data-pact="movetoggle" data-id="${e.id}" class="btn-secondary">Move to…</button>
       <div data-pmove="${e.id}" class="absolute right-0 z-10 mt-1 w-44 rounded-md border border-slate-200 bg-white shadow-lg hidden">${moveOptions}</div>
     </div>`;
-  const action = `${primaryAction}${moveBlock}`;
+  // W-batch: Mark urgent on waiting pharmacy patients (e.g. patient
+  // brings in a critical script, suspected adverse interaction, etc.).
+  const urgentBlock = (e.status === 'waiting' && !e.priority)
+    ? `<button data-pact="urgent" data-id="${e.id}" class="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-100">Mark urgent</button>`
+    : '';
+  const action = `${primaryAction}${urgentBlock}${moveBlock}`;
   // Notes editor only after interaction starts (called/preparing).
   const notesBlock = e.status === 'waiting' ? '' : `
       <div class="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3">
@@ -1791,6 +1823,11 @@ function wirePharmRowButtons() {
       if (act === 'call') callEntry(id);
       else if (act === 'prep') setPreparing(id);
       else if (act === 'seen') markSeen(id);
+      else if (act === 'urgent') {
+        const reason = window.prompt('Mark this patient urgent? Enter a brief clinical reason:', 'Clinically urgent');
+        if (!reason) return;
+        setUrgent(id, reason);
+      }
       else if (act === 'movetoggle') {
         const menu = document.querySelector(`[data-pmove="${id}"]`);
         if (menu) menu.classList.toggle('hidden');

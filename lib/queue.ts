@@ -331,6 +331,29 @@ export const setWithNurse = (id: string, actor?: { id: string | null; label: str
 export const setWithDoctor = (id: string, actor?: { id: string | null; label: string | null }) =>
   setClinicStage(id, "with_doctor", actor);
 
+// Escalate an existing waiting patient to the front of the queue.
+// Flips the priority flag + captures a reason. Distinct from
+// priorityInsert which creates a brand-new entry.
+export async function setUrgent(
+  id: string,
+  reason: string,
+  actor?: { id: string | null; label: string | null },
+): Promise<void> {
+  const supabase = getServerSupabase();
+  const { error } = await supabase
+    .from("queue_entries")
+    .update({ priority: true, priority_reason: reason.trim() || null })
+    .eq("id", id);
+  if (error) throw error;
+  await writeAudit({
+    entry_id: id,
+    actor_id: actor?.id ?? null,
+    actor_label: actor?.label ?? null,
+    action: "priority_insert",
+    detail: { escalated: true, reason: reason.trim() || null },
+  });
+}
+
 export async function markSeen(id: string, actor?: { id: string | null; label: string | null }): Promise<void> {
   const supabase = getServerSupabase();
   const { error } = await supabase

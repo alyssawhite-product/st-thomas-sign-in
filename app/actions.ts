@@ -14,6 +14,7 @@ import {
   setAtRecords,
   setPharmacyNote,
   setPreparing,
+  setUrgent,
   setWithDoctor,
   setWithNurse,
   transferEntry,
@@ -187,6 +188,18 @@ export async function setWithDoctorAction(formData: FormData): Promise<void> {
   if (!id) throw new Error("Missing id");
   await setWithDoctor(id, actorFromSession(session));
   revalidatePath("/staff");
+}
+
+// Escalate an existing waiting patient to the front of the queue.
+export async function setUrgentAction(formData: FormData): Promise<void> {
+  const session = await requireStaffRole(["clinician", "pharmacist", "admin"]);
+  const id = String(formData.get("id") ?? "");
+  const reason = String(formData.get("reason") ?? "").trim();
+  if (!id) throw new Error("Missing id");
+  if (!reason) throw new Error("REASON_REQUIRED");
+  await setUrgent(id, reason, actorFromSession(session));
+  revalidatePath("/staff");
+  revalidatePath("/pharmacy");
 }
 
 export async function savePharmacyNoteAction(formData: FormData): Promise<void> {

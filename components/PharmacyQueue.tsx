@@ -10,6 +10,7 @@ import {
   markSeenAction,
   savePharmacyNoteAction,
   setPreparingAction,
+  setUrgentAction,
   staffLogoutAction,
   staffTransferAction,
 } from "@/app/actions";
@@ -64,6 +65,18 @@ export function PharmacyQueue({ initialEntries, email, role }: Props) {
     fd.set("visit_type", visitType);
     startTransition(() => staffTransferAction(fd));
     setOpenMoveFor(null);
+  }
+
+  function handleMarkUrgent(id: string) {
+    const reason = window.prompt(
+      "Mark this patient urgent? Enter a brief reason:",
+      "Urgent",
+    );
+    if (!reason) return;
+    const fd = new FormData();
+    fd.set("id", id);
+    fd.set("reason", reason);
+    startTransition(() => setUrgentAction(fd));
   }
   const [, setNow] = useState(Date.now());
   const [activeTab, setActiveTab] = useState<Tab>("waiting");
@@ -250,13 +263,25 @@ export function PharmacyQueue({ initialEntries, email, role }: Props) {
                   <div className="mt-3 flex flex-wrap gap-2">
                     {/* Single-button-at-a-time progression: Call → Mark preparing → Mark served. */}
                     {isWaiting && (
-                      <button
-                        onClick={() => submitAction(callPatientAction, e.id)}
-                        disabled={pending}
-                        className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark disabled:opacity-50"
-                      >
-                        Call
-                      </button>
+                      <>
+                        <button
+                          onClick={() => submitAction(callPatientAction, e.id)}
+                          disabled={pending}
+                          className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark disabled:opacity-50"
+                        >
+                          Call
+                        </button>
+                        {!e.priority && (
+                          <button
+                            onClick={() => handleMarkUrgent(e.id)}
+                            disabled={pending}
+                            className="rounded-lg border border-red-500 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
+                            title="Mark this patient urgent and jump to the front of the queue"
+                          >
+                            Mark urgent
+                          </button>
+                        )}
+                      </>
                     )}
                     {isCalled && (
                       <button
