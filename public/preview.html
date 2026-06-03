@@ -756,7 +756,10 @@ function transferEntry(id, newVisitType, hasPrescription) {
   if (!entry) return;
   const newStream = streamFor(newVisitType);
   const ticketNumber = state.nextTicketByStream[newStream]++;
-  entry.transferred_from = entry.transferred_from || entry.visit_type;
+  // Always capture the IMMEDIATE previous visit_type so the patient
+  // banner shows the latest hop, not the original origin (fix from
+  // CC1 sanity test).
+  entry.transferred_from = entry.visit_type;
   entry.visit_type = newVisitType;
   entry.ticket_number = ticketNumber;
   entry.created_at = new Date().toISOString();

@@ -516,7 +516,12 @@ export async function transferEntry(input: TransferEntryInput): Promise<QueueEnt
 
   const updates: Record<string, unknown> = {
     visit_type: input.newVisitType,
-    transferred_from: e.transferred_from ?? e.visit_type,
+    // Capture the IMMEDIATE previous visit_type so the patient-facing
+    // banner ("You've been moved from X → Y") reflects the latest hop,
+    // not the original origin. Fix from sanity test: a patient who
+    // bounced General → Pharmacy → General used to read "From General
+    // → General" because transferred_from was only set once.
+    transferred_from: e.visit_type,
     ticket_number: ticketNumber,
     created_at: nowIso,  // bump to end of destination queue
     status: "waiting",
