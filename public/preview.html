@@ -82,19 +82,23 @@
         <p id="si-country-error" class="mt-1 hidden text-sm font-medium text-red-700"></p>
       </div>
 
+      <!-- EE9: default Non-Nationals to Passport, clearer label. -->
       <div id="si-id-type-row" class="hidden">
-        <span class="field-label block mb-2">Identification type</span>
+        <span class="field-label block">Identification document</span>
+        <p class="mb-2 text-sm text-slate-500">We&rsquo;ll use this to find or create your record.</p>
         <div class="flex gap-3">
           <label class="flex cursor-pointer items-center gap-2 rounded-md border px-4 py-2.5 text-sm font-medium has-[:checked]:border-brand has-[:checked]:bg-brand-light border-slate-300">
-            <input type="radio" name="si-id-type" value="national_id" checked class="h-4 w-4 accent-emerald-700" /> National ID
+            <input type="radio" name="si-id-type" value="passport" checked class="h-4 w-4 accent-emerald-700" /> Passport
           </label>
           <label class="flex cursor-pointer items-center gap-2 rounded-md border px-4 py-2.5 text-sm font-medium has-[:checked]:border-brand has-[:checked]:bg-brand-light border-slate-300">
-            <input type="radio" name="si-id-type" value="passport" class="h-4 w-4 accent-emerald-700" /> Passport
+            <input type="radio" name="si-id-type" value="national_id" class="h-4 w-4 accent-emerald-700" /> National ID
           </label>
         </div>
       </div>
 
-      <div>
+      <!-- EE8: ID number row only revealed once nationality is set,
+           so the label is always specific to the branch. -->
+      <div id="si-id-number-row" class="hidden">
         <label for="si-id-number" id="si-id-number-label" class="field-label">ID number</label>
         <input id="si-id-number" maxlength="30" class="field-input" placeholder="e.g. 1234567890" />
         <p id="si-id-number-error" class="mt-1 hidden text-sm font-medium text-red-700"></p>
@@ -119,6 +123,15 @@
         <div class="mt-3 space-y-2" id="si-prescription-opts"></div>
         <p id="si-has-prescription-error" class="mt-2 hidden text-sm font-medium text-red-700"></p>
       </fieldset>
+
+      <!-- EE5: when the user picks "Other", capture a short reason so
+           the clinic dashboard can show what the patient came in for. -->
+      <div id="si-other-reason-row" class="hidden">
+        <label for="si-other-reason" class="field-label">What brings you in today?</label>
+        <p class="mb-2 text-sm text-slate-500">A short note so the clinician knows what to expect.</p>
+        <textarea id="si-other-reason" rows="3" maxlength="200" placeholder="e.g. Vaccination certificate, ear infection follow-up, lab test pickup" class="field-input"></textarea>
+        <p id="si-other-reason-error" class="mt-1 hidden text-sm font-medium text-red-700"></p>
+      </div>
 
       <button type="submit" class="btn-primary w-full text-lg">Check in</button>
 
@@ -148,23 +161,18 @@
 
     <div id="q-status-box"></div>
 
-    <dl class="mt-8 grid grid-cols-2 gap-4 text-sm">
-      <div>
-        <dt class="text-slate-500">Reference</dt>
-        <dd class="mt-1 font-mono text-lg font-semibold tracking-widest" id="q-ref">—</dd>
-      </div>
-      <div>
-        <dt class="text-slate-500">Visit type</dt>
-        <dd class="mt-1 font-semibold capitalize" id="q-visit-type">—</dd>
-      </div>
-    </dl>
-
-    <section class="mt-8 rounded-lg border border-slate-200 bg-slate-50 p-4">
-      <h2 class="text-sm font-bold text-slate-800">How to find your place again</h2>
-      <p class="mt-1 text-sm text-slate-600">
-        Go to <a id="q-lookup-url" class="font-semibold text-brand hover:underline" href="#">your lookup URL</a> and enter your name, ID number, or reference code.
-      </p>
+    <!-- EE13: reference token gets its own prominent card so the
+         patient can write it down. This is the recovery key if the
+         page is closed. -->
+    <section class="mt-6 rounded-xl border border-slate-300 bg-white p-5 text-center">
+      <p class="text-sm font-semibold uppercase tracking-wide text-slate-500">Your reference code</p>
+      <p class="mt-1 font-mono text-3xl font-bold tracking-widest text-slate-800" id="q-ref">—</p>
+      <p class="mt-2 text-sm text-slate-600">Write this down. You can use it to find your place again from any phone.</p>
     </section>
+
+    <p class="mt-4 text-sm text-slate-500">
+      <span class="font-semibold text-slate-700">Visit type:</span> <span id="q-visit-type">—</span>
+    </p>
 
     <div id="q-transfer-box" class="mt-6 rounded-xl border border-slate-200 p-5 hidden">
       <p class="text-sm font-semibold text-slate-700">Need to visit another department?</p>
@@ -196,15 +204,25 @@
       </div>
     </div>
 
-    <p class="mt-8 text-sm text-slate-600">
-      Take a seat in the waiting area. You will be called by name when it is your turn.
-      If you have any questions, speak to a member of staff at the front desk and show
-      them your reference code.
-    </p>
-    <!-- BB6: explicit "New check-in" button so a shared-kiosk user can
-         start over without instructions. -->
+    <!-- EE1 + EE11: single block of "what happens next" copy.
+         Replaces the contradictory "called by name" / "display shows
+         initials only" combo and drops the dev URL — the reference
+         code card above already gives the patient their recovery key. -->
+    <section class="mt-8 rounded-lg border border-slate-200 bg-slate-50 p-4">
+      <h2 class="text-sm font-bold text-slate-800">What happens next</h2>
+      <ul class="mt-2 space-y-1 text-sm text-slate-600">
+        <li>Take a seat in the waiting area.</li>
+        <li>We&rsquo;ll call your name over the speaker. For privacy, the screen shows only your initials and your ticket number.</li>
+        <li>If you leave this page, use your reference code at <a id="q-lookup-url" class="font-semibold text-brand hover:underline" href="#">the lookup page</a> to find your place again.</li>
+        <li>If you have any questions, speak to a member of staff at the front desk.</li>
+      </ul>
+    </section>
+
+    <!-- BB6 + EE7: explicit "New check-in" button for shared kiosks.
+         Confirms before navigating away so personal-phone users don't
+         accidentally abandon their queue page. -->
     <div class="mt-6 text-center">
-      <button type="button" data-go="signin" class="nav-btn inline-block rounded-md border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+      <button type="button" id="q-new-checkin" class="inline-block rounded-md border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">
         Check in another patient →
       </button>
     </div>
@@ -241,8 +259,8 @@
 <!-- ============================== STAFF LOGIN ============================== -->
 <section data-view="stafflogin">
   <main class="mx-auto flex min-h-screen max-w-sm flex-col justify-center px-6 py-10">
-    <h1 class="text-2xl font-bold">Clinic sign-in</h1>
-    <p class="mt-2 text-slate-600">Sign in with your clinic email. Demo password: <code class="rounded bg-slate-100 px-1 text-sm">DemoPass1!</code></p>
+    <h1 class="text-2xl font-bold">Staff sign-in</h1>
+    <p class="mt-2 text-slate-600">Sign in with your work email. Clinicians and admins go to the Clinic dashboard, pharmacists go to the Pharmacy dashboard.</p>
     <form id="staff-login-form" class="mt-6 space-y-4" novalidate>
       <div>
         <label class="field-label">Email</label>
@@ -256,8 +274,12 @@
       <button type="submit" class="btn-primary w-full">Sign in</button>
     </form>
     <div data-powered-by="light" class="mt-10"></div>
-    <div class="mt-6 rounded-md bg-slate-100 p-3 text-xs text-slate-600">
-      <p class="font-semibold">Demo accounts:</p>
+    <!-- EE15: clearly mark demo credentials so a reviewer doesn't
+         confuse them with real account info. -->
+    <div class="mt-6 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+      <p class="font-bold uppercase tracking-wider">⚠ Demo only — remove in production</p>
+      <p class="mt-1">Sample accounts you can use to explore the dashboards. Demo password: <code class="rounded bg-white px-1">DemoPass1!</code></p>
+      <p class="mt-2 font-semibold">Accounts:</p>
       <ul class="mt-1 space-y-0.5">
         <li>admin@stthomas.demo (admin)</li>
         <li>clinician@stthomas.demo (clinician → /staff)</li>
@@ -280,7 +302,7 @@
     </header>
 
     <div class="mt-6" id="staff-help-banner"></div>
-    <div class="mt-6 grid grid-cols-3 gap-4 text-center" id="staff-stats"></div>
+    <div class="mt-6" id="staff-stats"></div>
 
     <div class="mt-6 flex flex-wrap gap-2">
       <button id="staff-toggle-priority" class="btn-secondary">+ Priority insert</button>
@@ -336,7 +358,7 @@
     </header>
 
     <div id="pharm-help-banner"></div>
-    <div class="grid grid-cols-3 gap-4 text-center mb-6" id="pharm-stats"></div>
+    <div class="mb-6" id="pharm-stats"></div>
 
     <div class="border-b border-slate-200">
       <nav class="-mb-px flex flex-wrap gap-6" id="pharm-tabs"></nav>
@@ -407,15 +429,19 @@
 </section>
 
 <!-- ============================== DEMO NAV ============================== -->
-<nav class="fixed bottom-0 left-0 right-0 z-50 border-t border-slate-200 bg-white/95 backdrop-blur-sm">
-  <div class="mx-auto flex max-w-3xl items-center justify-between gap-2 px-4 py-1">
-    <span class="text-[10px] font-semibold uppercase tracking-widest text-slate-400">Demo</span>
+<!-- EE16: clearer "Demo only" framing on the bottom bar so patients
+     viewing this on their phone don't mistake "Clinic" / "Pharmacy"
+     for places to tap. Production builds remove this section
+     entirely. -->
+<nav class="fixed bottom-0 left-0 right-0 z-50 border-t-2 border-amber-300 bg-amber-50/95 backdrop-blur-sm">
+  <div class="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-2 px-4 py-1.5">
+    <span class="text-[10px] font-bold uppercase tracking-widest text-amber-800">⚠ Demo controls — switch view:</span>
     <div class="flex flex-wrap gap-1">
-      <button data-go="signin" class="nav-btn rounded-md px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100">Check in</button>
-      <button data-go="display" class="nav-btn rounded-md px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100">Display</button>
-      <button data-go="stafflogin" class="nav-btn rounded-md px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100">Clinic</button>
-      <button data-go="pharmacy" class="nav-btn rounded-md px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100">Pharmacy</button>
-      <button data-go="qr" class="nav-btn rounded-md px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100">QR code</button>
+      <button data-go="signin" class="nav-btn rounded-md px-3 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-100">Patient check-in</button>
+      <button data-go="display" class="nav-btn rounded-md px-3 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-100">Public display</button>
+      <button data-go="stafflogin" class="nav-btn rounded-md px-3 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-100">Clinic dashboard</button>
+      <button data-go="pharmacy" class="nav-btn rounded-md px-3 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-100">Pharmacy dashboard</button>
+      <button data-go="qr" class="nav-btn rounded-md px-3 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-100">QR poster</button>
     </div>
   </div>
 </nav>
@@ -692,7 +718,7 @@ function waitMinutes(iso) {
 // ============================================================
 // Mutations
 // ============================================================
-function createEntry({ name, idType, idNumber, visitType, hasPrescription, nationality, countryOfOrigin }) {
+function createEntry({ name, idType, idNumber, visitType, hasPrescription, nationality, countryOfOrigin, otherReason }) {
   const stream = streamFor(visitType);
   const ticketNumber = state.nextTicketByStream[stream]++;
   const entry = {
@@ -709,6 +735,8 @@ function createEntry({ name, idType, idNumber, visitType, hasPrescription, natio
     has_prescription: visitType === 'pharmacy' ? (hasPrescription || null) : null,
     nationality: nationality || null,
     country_of_origin: nationality === 'non_national' ? (countryOfOrigin || null) : null,
+    // EE5: free-text reason when visit_type is "other".
+    other_reason: visitType === 'other' ? (otherReason || null) : null,
     created_at: new Date().toISOString(),
     called_at: null,
     seen_at: null,
@@ -903,10 +931,14 @@ function renderSigninForm() {
     r.addEventListener('change', () => {
       updatePrescriptionVisibility();
       updateConsultationVisibility();
+      updateOtherReasonVisibility();
       siClearFieldError('visit-type');
       siClearFieldError('consultation-type');
+      siClearFieldError('other-reason');
     });
   });
+  // EE5: typing in the Other reason textarea also clears its error.
+  document.getElementById('si-other-reason').addEventListener('input', () => siClearFieldError('other-reason'));
 
   const consWrap = document.getElementById('si-consultation-opts');
   consWrap.innerHTML = CONSULTATION_TYPES.map((opt, i) => `
@@ -954,17 +986,23 @@ function renderSigninForm() {
     otherInput.addEventListener('input', () => siClearFieldError('country'));
   }
 
-  // Nationality radios show/hide country + ID-type, and tweak ID label.
+  // Nationality radios show/hide country + ID-type + ID number, and
+  // tweak the ID number label.
   document.querySelectorAll('input[name="si-nationality"]').forEach(r => {
     r.addEventListener('change', () => {
       const v = document.querySelector('input[name="si-nationality"]:checked')?.value;
       const isNonNational = v === 'non_national';
       document.getElementById('si-country-row').classList.toggle('hidden', !isNonNational);
       document.getElementById('si-id-type-row').classList.toggle('hidden', !isNonNational);
-      // Nationals are forced to national_id.
+      // EE8: ID number only revealed once we know which document to ask for.
+      document.getElementById('si-id-number-row').classList.toggle('hidden', !v);
+      // EE9: Nationals → National ID. Non-Nationals → Passport (default).
       if (!isNonNational) {
         const natRadio = document.querySelector('input[name="si-id-type"][value="national_id"]');
         if (natRadio) natRadio.checked = true;
+      } else {
+        const passRadio = document.querySelector('input[name="si-id-type"][value="passport"]');
+        if (passRadio) passRadio.checked = true;
       }
       siUpdateIdLabel();
       siClearFieldError('nationality');
@@ -1012,8 +1050,16 @@ function updateConsultationVisibility() {
     document.querySelectorAll('input[name="si-consultation-type"]').forEach(r => (r.checked = false));
   }
 }
+// EE5: Other → free-text reason. Hidden unless "Other" is picked.
+function updateOtherReasonVisibility() {
+  const picked = document.querySelector('input[name="si-visit-type"]:checked');
+  const show = picked && picked.value === 'other';
+  const row = document.getElementById('si-other-reason-row');
+  row.classList.toggle('hidden', !show);
+  if (!show) document.getElementById('si-other-reason').value = '';
+}
 // --- Sign-in: full-form validation with summary, inline errors, reactive clear -----
-const SI_FIELDS = ['name', 'nationality', 'country', 'id-number', 'visit-type', 'consultation-type', 'has-prescription'];
+const SI_FIELDS = ['name', 'nationality', 'country', 'id-number', 'visit-type', 'consultation-type', 'has-prescription', 'other-reason'];
 const SI_FIELD_META = {
   'name': { input: 'si-name', label: 'Your name', emptyMsg: 'Enter a name that is at least 2 characters.' },
   'nationality': { input: 'si-name', label: 'Nationality', emptyMsg: 'Tell us whether you are a national or non-national.' },
@@ -1022,6 +1068,7 @@ const SI_FIELD_META = {
   'visit-type': { input: 'visit-type-general_clinic', label: 'Type of visit', emptyMsg: 'Choose a type of visit.' },
   'consultation-type': { input: 'consultation-type-general', label: 'Consultation type', emptyMsg: 'Choose new consultation or follow-up.' },
   'has-prescription': { input: 'has-prescription-yes', label: 'Prescription', emptyMsg: 'Tell us about your prescription.' },
+  'other-reason': { input: 'si-other-reason', label: 'What brings you in today?', emptyMsg: 'Tell us briefly what brings you in.' },
 };
 
 function siFindDuplicate(idNumber) {
@@ -1073,12 +1120,22 @@ function siRefreshSummary() {
   if (errors.length === 0 && !dupVisible) {
     summary.classList.add('hidden');
     list.innerHTML = '';
+    if (document.title.startsWith('Error:')) {
+      document.title = document.title.replace(/^Error:\s*/, '');
+    }
     return;
   }
   summary.classList.remove('hidden');
-  list.innerHTML = errors.map(e =>
-    `<li><button type="button" data-si-jump="${e.field}" class="font-medium text-red-700 underline hover:text-red-900">${escapeHtml(e.msg)}</button></li>`
-  ).join('') + (dupVisible ? `<li>${dup.innerHTML}</li>` : '');
+  // EE6: GDS pattern — link text is the FIELD LABEL, the error
+  // sentence is plain text after it. Page title also flagged so
+  // screen readers re-announce on next focus.
+  if (!document.title.startsWith('Error:')) {
+    document.title = 'Error: ' + (document.title || 'Check in for your visit');
+  }
+  list.innerHTML = errors.map(e => {
+    const label = SI_FIELD_META[e.field]?.label ?? e.field;
+    return `<li><button type="button" data-si-jump="${e.field}" class="font-medium text-red-700 underline hover:text-red-900">${escapeHtml(label)}</button><span>: ${escapeHtml(e.msg)}</span></li>`;
+  }).join('') + (dupVisible ? `<li>${dup.innerHTML}</li>` : '');
   list.querySelectorAll('[data-si-jump]').forEach(b => {
     b.addEventListener('click', () => {
       const field = b.dataset.siJump;
@@ -1116,6 +1173,8 @@ document.getElementById('signin-form').addEventListener('submit', (e) => {
     : '';
   const rxEl = document.querySelector('input[name="si-rx"]:checked');
   const rx = rxEl ? rxEl.value : '';
+  // EE5: "Other" free-text reason.
+  const otherReason = document.getElementById('si-other-reason').value.trim();
 
   let hasError = false;
   if (name.trim().length < 2) {
@@ -1135,7 +1194,9 @@ document.getElementById('signin-form').addEventListener('submit', (e) => {
     siShowFieldError('country', 'Enter the name of your country.');
     hasError = true;
   }
-  if (!idNumber) {
+  // EE8: only require ID number once nationality is picked (the
+  // field is hidden until then).
+  if (nationality && !idNumber) {
     siShowFieldError('id-number', 'Enter your ID number.');
     hasError = true;
   }
@@ -1149,6 +1210,11 @@ document.getElementById('signin-form').addEventListener('submit', (e) => {
   }
   if (topLevelVisit === 'pharmacy' && !rx) {
     siShowFieldError('has-prescription', 'Tell us about your prescription.');
+    hasError = true;
+  }
+  // EE5: "Other" needs a free-text reason.
+  if (topLevelVisit === 'other' && !otherReason) {
+    siShowFieldError('other-reason', 'Tell us briefly what brings you in.');
     hasError = true;
   }
 
@@ -1176,12 +1242,16 @@ document.getElementById('signin-form').addEventListener('submit', (e) => {
     hasPrescription: rx || null,
     nationality,
     countryOfOrigin: nationality === 'non_national' ? country : null,
+    otherReason: visitType === 'other' ? otherReason : null,
   });
   document.getElementById('signin-form').reset();
   // Reset visibility states
   document.getElementById('si-country-row').classList.add('hidden');
   document.getElementById('si-country-other').classList.add('hidden');
   document.getElementById('si-country-other').value = '';
+  document.getElementById('si-id-number-row').classList.add('hidden');
+  document.getElementById('si-other-reason-row').classList.add('hidden');
+  document.getElementById('si-other-reason').value = '';
   document.getElementById('si-id-type-row').classList.add('hidden');
   document.getElementById('si-consultation-fs').classList.add('hidden');
   document.querySelector('input[name="si-id-type"][value="national_id"]').checked = true;
@@ -1244,13 +1314,23 @@ function renderQueue() {
   const summary = document.getElementById('q-summary');
   const lookupAnchor = document.getElementById('q-lookup-url');
 
-  // Always update the lookup URL to point at the deployed origin.
+  // EE11: link text is just "the lookup page" -- the patient already
+  // has the reference code on a separate card; they don't need to
+  // memorise a URL.
   if (lookupAnchor) {
-    const base = (location.origin && location.origin !== 'null') ? location.origin + location.pathname : '';
-    const display = base.replace(/^https?:\/\//, '').replace(/\/?(preview\.html)?$/, '') + '/lookup';
-    lookupAnchor.textContent = display;
+    lookupAnchor.textContent = 'the lookup page';
     lookupAnchor.href = '#';
     lookupAnchor.onclick = (ev) => { ev.preventDefault(); go('lookup'); };
+  }
+  // EE7: new check-in button confirms before navigating away so a
+  // patient on their personal phone doesn't lose their queue page.
+  const newCheckInBtn = document.getElementById('q-new-checkin');
+  if (newCheckInBtn && !newCheckInBtn.dataset.wired) {
+    newCheckInBtn.dataset.wired = '1';
+    newCheckInBtn.addEventListener('click', () => {
+      if (!confirm("Start a new check-in? Your current queue position is still saved — you can come back using your reference code.")) return;
+      go('signin');
+    });
   }
 
   const transferBox = document.getElementById('q-transfer-box');
@@ -1343,14 +1423,16 @@ function renderQueue() {
         <p class="mt-1 text-lg font-semibold text-emerald-900">From ${escapeHtml(fromLabel)} → ${escapeHtml(toLabel)}</p>
         ${entry.ticket_number != null ? `<p class="mt-1 text-sm text-emerald-800">Your new ticket is <span class="font-mono font-bold">#${entry.ticket_number}</span>.</p>` : ''}
       </section>` : '';
+    // EE3: ticket is the patient's primary identity (matches what the
+    // display calls). Position is a smaller supporting line below
+    // so people don't confuse the two numbers.
     box.innerHTML = `
       ${transferConfirm}
       <section class="rounded-xl bg-brand-light p-8 text-center">
-        ${ticketLineWaiting}
-        <p class="${entry.ticket_number != null ? 'mt-4 ' : ''}text-sm font-semibold uppercase tracking-wide text-brand">Your queue position</p>
-        <p class="mt-1 text-6xl font-bold text-brand-dark">${position}</p>
-        <p class="mt-3 text-slate-700">${ahead === 0 ? "You're next." : `${ahead} ${ahead === 1 ? 'person' : 'people'} ahead of you`}</p>
-        ${ahead > 0 ? `<p class="mt-1 text-sm text-slate-500">Estimated wait: about ${wait} minute${wait === 1 ? '' : 's'}</p>` : ''}
+        <p class="text-sm font-semibold uppercase tracking-wide text-brand">Your ticket</p>
+        <p class="mt-1 text-7xl font-black text-brand-dark">#${entry.ticket_number ?? '—'}</p>
+        <p class="mt-5 text-slate-700">${ahead === 0 ? "You're next in line." : `You're position <strong>${position}</strong> — ${ahead} ${ahead === 1 ? 'person' : 'people'} ahead of you.`}</p>
+        ${ahead > 0 ? `<p class="mt-1 text-sm text-slate-500">Rough wait: about ${wait} minute${wait === 1 ? '' : 's'}</p>` : ''}
       </section>`;
   }
   void ticketLine;  // reserved for future use; intentionally unused right now
@@ -1400,12 +1482,22 @@ function renderQueue() {
       document.querySelectorAll('.q-xfer').forEach(b => {
         b.addEventListener('click', () => {
           const vt = b.dataset.vt;
+          // EE7: confirm before patient self-transfer. Reduces
+          // accidental taps on a shared kiosk / scrolling phone.
+          const destLabel = vt === 'pharmacy' ? 'Pharmacy' : 'General Clinic';
           if (b.dataset.askRx === '1') {
+            // For Pharmacy we still ask the prescription question
+            // first; that step is itself a "are you sure" gate so a
+            // second confirm fires only on the prescription pick.
             document.getElementById('q-prescription-prompt').classList.remove('hidden');
             document.querySelectorAll('.rx-pick').forEach(rxBtn => {
-              rxBtn.onclick = () => { transferEntry(entry.id, 'pharmacy', rxBtn.dataset.rx); };
+              rxBtn.onclick = () => {
+                if (!confirm("Move to Pharmacy? You'll get a new ticket and be placed at the back of the Pharmacy queue.")) return;
+                transferEntry(entry.id, 'pharmacy', rxBtn.dataset.rx);
+              };
             });
           } else {
+            if (!confirm(`Move to ${destLabel}? You'll get a new ticket and be placed at the back of that queue.`)) return;
             transferEntry(entry.id, vt);
           }
         });
@@ -1730,11 +1822,11 @@ function renderStaff() {
     called: clinicalEntries.filter(e => CLINIC_IN_PROGRESS.includes(e.status)).length,
     seen: clinicalEntries.filter(e => e.status === 'seen').length,
   };
-  document.getElementById('staff-stats').innerHTML = `
-    ${statCard('Waiting', stats.waiting)}
-    ${statCard('Called', stats.called)}
-    ${statCard('Seen', stats.seen)}
-  `;
+  // EE12 + EE-wait: tabs already show the bucket counts. Headline
+  // strip surfaces the metric staff actually need to manage flow:
+  // average wait from check-in to first call. Visible to staff only;
+  // not exposed on the public display.
+  document.getElementById('staff-stats').innerHTML = avgWaitHeadline(clinicalEntries);
 
   const tabs = [
     { id: 'waiting', label: `Waiting (${stats.waiting})` },
@@ -1791,6 +1883,23 @@ function sortQueueOrder(a, b) {
 function statCard(label, value) {
   return `<div class="rounded-lg bg-slate-50 p-4"><div class="text-3xl font-bold">${value}</div><div class="text-sm text-slate-600">${label}</div></div>`;
 }
+// EE-wait: average wait time, in whole minutes, from check-in to
+// first call. Compute over entries that have actually been called
+// (called_at is set). Returns a ready-to-inject string for the
+// headline strip on the staff/pharmacy dashboards. Public display
+// intentionally does NOT show this.
+function avgWaitHeadline(entries) {
+  const called = (entries || []).filter(e => e.called_at && e.created_at);
+  if (called.length === 0) {
+    return `<div class="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-600"><span class="font-semibold text-slate-800">Average wait today:</span> —  (no patients called yet)</div>`;
+  }
+  const totalMs = called.reduce((acc, e) => {
+    const wait = new Date(e.called_at).getTime() - new Date(e.created_at).getTime();
+    return acc + Math.max(0, wait);
+  }, 0);
+  const mins = Math.round(totalMs / called.length / 60000);
+  return `<div class="rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-600"><span class="font-semibold text-slate-800">Average wait today:</span> ${mins} minute${mins === 1 ? '' : 's'} from check-in to first call</div>`;
+}
 function staffRow(e) {
   const stream = streamFor(e.visit_type);
   const wasCalled = CLINIC_IN_PROGRESS.includes(e.status);
@@ -1826,7 +1935,7 @@ function staffRow(e) {
   // with_nurse (pharmacy entries are transferred into the clinical
   // stream by setUrgent itself).
   const urgentInline = (e.status === 'waiting' && !e.priority)
-    ? `<button data-act="urgent" data-id="${e.id}" class="rounded-md bg-red-600 px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider text-white shadow hover:bg-red-700" title="Mark urgent — automatically calls this patient to the Nurse">Urgent</button>`
+    ? `<button data-act="urgent" data-id="${e.id}" class="rounded-md border border-red-600 px-2.5 py-1 text-xs font-semibold text-red-700 hover:bg-red-50" title="Mark urgent — automatically calls this patient to the Nurse">⚠ Mark urgent</button>`
     : '';
   const helpBadge = e.help_requested_at
     ? `<span class="rounded-full bg-red-600 px-2 py-0.5 text-xs font-bold uppercase text-white" title="Patient pressed Request help on their phone">🆘 Help requested</span>`
@@ -1850,6 +1959,7 @@ function staffRow(e) {
           ${escapeHtml(friendlyVisitType(e.visit_type) || e.visit_type)} · ${e.id_type === 'passport' ? 'Passport' : 'National ID'}: ${escapeHtml(e.id_number)} · Ref: <span class="font-mono tracking-widest">${e.token}</span>
         </p>
         ${e.priority && e.priority_reason ? `<p class="mt-1 text-xs text-red-700">Priority reason: ${escapeHtml(e.priority_reason)}</p>` : ''}
+        ${e.visit_type === 'other' && e.other_reason ? `<p class="mt-1 text-xs text-slate-700"><span class="font-semibold">Reason: </span>${escapeHtml(e.other_reason)}</p>` : ''}
       </div>
       <div class="flex flex-wrap gap-2 sm:justify-end">${actions}</div>
     </li>`;
@@ -1928,16 +2038,10 @@ function renderPharmacy() {
   // mirrored here for any race/edge case.
   const helpRequesters = list.filter(e => e.help_requested_at && e.status === 'with_nurse');
   document.getElementById('pharm-help-banner').innerHTML = renderHelpAlertBanner(helpRequesters);
-  const stats = {
-    waiting: list.filter(e => e.status === 'waiting').length,
-    called: list.filter(e => e.status === 'called' || e.status === 'preparing').length,
-    served: list.filter(e => e.status === 'seen').length,
-  };
-  document.getElementById('pharm-stats').innerHTML = `
-    ${statCard('Waiting', stats.waiting)}
-    ${statCard('Called', stats.called)}
-    ${statCard('Served', stats.served)}
-  `;
+  // EE2 + EE-wait: same single-line headline as the clinic dashboard.
+  // Pharmacy "1 Called" stat used to conflict with the tab split
+  // (Called vs Being Prepared) -- removing the stat resolves it.
+  document.getElementById('pharm-stats').innerHTML = avgWaitHeadline(list);
 
   const byTab = {
     waiting: list.filter(e => e.status === 'waiting'),
@@ -2019,7 +2123,7 @@ function pharmRow(e) {
   // pharmacy patient into the clinical stream and calls them straight
   // to the Nurse (see setUrgent).
   const urgentInline = (e.status === 'waiting' && !e.priority)
-    ? `<button data-pact="urgent" data-id="${e.id}" class="rounded-md bg-red-600 px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider text-white shadow hover:bg-red-700" title="Mark urgent — escalates this patient to the Clinic Nurse">Urgent</button>`
+    ? `<button data-pact="urgent" data-id="${e.id}" class="rounded-md border border-red-600 px-2.5 py-1 text-xs font-semibold text-red-700 hover:bg-red-50" title="Mark urgent — escalates this patient to the Clinic Nurse">⚠ Mark urgent</button>`
     : '';
   const helpBadge = e.help_requested_at
     ? `<span class="rounded-full bg-red-600 px-2 py-0.5 text-xs font-bold uppercase text-white" title="Patient pressed Request help on their phone">🆘 Help requested</span>`

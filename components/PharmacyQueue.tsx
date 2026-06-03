@@ -116,13 +116,19 @@ export function PharmacyQueue({ initialEntries, email, role }: Props) {
     startTransition(() => action(fd));
   }
 
-  // Stats: Waiting / Called / Served. Called count includes preparing too,
-  // so the headline number matches what staff are working on right now.
-  const stats = useMemo(() => ({
-    waiting: entries.filter((e) => e.status === "waiting").length,
-    called: entries.filter((e) => e.status === "called" || e.status === "preparing").length,
-    served: entries.filter((e) => e.status === "seen").length,
-  }), [entries]);
+  // EE-wait: average minutes between arrival and first call. Visible
+  // to staff only; the public display intentionally doesn't show wait
+  // estimates (we don't want patients comparing tickets to perceived
+  // delay and getting frustrated).
+  const avgWaitMinutes = useMemo(() => {
+    const called = entries.filter((e) => e.called_at && e.created_at);
+    if (called.length === 0) return null;
+    const totalMs = called.reduce((acc, e) => {
+      const wait = new Date(e.called_at as string).getTime() - new Date(e.created_at).getTime();
+      return acc + Math.max(0, wait);
+    }, 0);
+    return Math.round(totalMs / called.length / 60_000);
+  }, [entries]);
 
   // Pharmacy patients who pressed Request Help. In practice this list
   // is usually empty because requestHelp() transfers them to the
@@ -191,10 +197,15 @@ export function PharmacyQueue({ initialEntries, email, role }: Props) {
         </div>
       )}
 
-      <div className="grid grid-cols-3 gap-4 text-center mb-6">
-        <Stat label="Waiting" value={stats.waiting} />
-        <Stat label="Called" value={stats.called} />
-        <Stat label="Served" value={stats.served} />
+      {/* EE2 + EE-wait: tabs carry the bucket counts; headline shows
+          the wait metric instead. Pharmacy "Called" stat used to
+          conflict with the Called/Being Prepared tab split -- now
+          unambiguous. */}
+      <div className="mb-6 rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-600">
+        <span className="font-semibold text-slate-800">Average wait today:</span>{" "}
+        {avgWaitMinutes === null
+          ? "—  (no patients called yet)"
+          : <>{avgWaitMinutes} minute{avgWaitMinutes === 1 ? "" : "s"} from check-in to first call</>}
       </div>
 
       <div className="border-b border-slate-200">
@@ -273,10 +284,10 @@ export function PharmacyQueue({ initialEntries, email, role }: Props) {
                         type="button"
                         disabled={pending}
                         onClick={() => handleMarkUrgent(e.id)}
-                        className="rounded-md bg-red-600 px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider text-white shadow hover:bg-red-700 disabled:opacity-50"
+                        className="rounded-md border border-red-600 px-2.5 py-1 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
                         title="Mark urgent — escalates this patient to the Clinic Nurse"
                       >
-                        Urgent
+                        ⚠ Mark urgent
                       </button>
                     )}
                     <span className={`rounded-full px-2 py-0.5 text-xs font-semibold uppercase ${statusBadgeClass(e.status)}`}>
@@ -391,15 +402,6 @@ export function PharmacyQueue({ initialEntries, email, role }: Props) {
 
       <PoweredBy className="mt-12" />
     </main>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-lg bg-slate-50 p-4">
-      <div className="text-3xl font-bold">{value}</div>
-      <div className="text-sm text-slate-600">{label}</div>
-    </div>
   );
 }
 

@@ -134,6 +134,8 @@ export interface CreateEntryInput {
   hasPrescription?: HasPrescription | null;
   nationality?: Nationality | null;
   countryOfOrigin?: string | null;
+  // EE5: free-text reason when visit_type is "other".
+  otherReason?: string | null;
 }
 
 export async function createEntry({
@@ -144,6 +146,7 @@ export async function createEntry({
   hasPrescription,
   nationality,
   countryOfOrigin,
+  otherReason,
 }: CreateEntryInput): Promise<QueueEntry> {
   const supabase = getServerSupabase();
 
@@ -178,6 +181,12 @@ export async function createEntry({
         // check constraint enforces the pairing.
         country_of_origin:
           nationality === "non_national" ? countryOfOrigin ?? null : null,
+        // EE5: persist the "Other" reason. The migration in
+        // supabase/migrations/0005_other_reason.sql adds the column;
+        // in older databases the row will reject this field, so a
+        // future deploy needs to apply that migration first.
+        other_reason:
+          visitType === "other" ? (otherReason ?? null) : null,
       })
       .select("*")
       .single();

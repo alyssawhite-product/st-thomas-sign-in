@@ -56,35 +56,31 @@ export default async function PersonalQueuePage({ params }: Props) {
 
       <QueuePosition initialEntry={view.entry} initialAhead={view.ahead} />
 
-      <dl className="mt-8 grid grid-cols-2 gap-4 text-sm">
-        <div>
-          <dt className="text-slate-500">Reference</dt>
-          <dd className="mt-1 font-mono text-lg font-semibold tracking-widest">
-            {view.entry.token}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-slate-500">Visit type</dt>
-          <dd className="mt-1 font-semibold capitalize">{view.entry.visit_type}</dd>
-        </div>
-      </dl>
-
+      {/* EE1 + EE11: single block of "what happens next" copy.
+          Replaces the contradictory "called by name" / "display shows
+          initials only" combo and drops the dev URL — patients use
+          the reference code from the card above to find their place
+          again from the lookup link in the header. */}
       <section className="mt-8 rounded-lg border border-slate-200 bg-slate-50 p-4">
-        <h2 className="text-sm font-bold text-slate-800">How to find your place again</h2>
-        <p className="mt-1 text-sm text-slate-600">
-          Go to{" "}
-          <a href={lookupUrl} className="font-semibold text-brand hover:underline">
-            {lookupUrl.replace(/^https?:\/\//, "")}
-          </a>{" "}
-          and enter your name, ID number, or reference code.
-        </p>
+        <h2 className="text-sm font-bold text-slate-800">What happens next</h2>
+        <ul className="mt-2 space-y-1 text-sm text-slate-600">
+          <li>Take a seat in the waiting area.</li>
+          <li>
+            We&apos;ll call your name over the speaker. For privacy, the screen shows only
+            your initials and your ticket number.
+          </li>
+          <li>
+            If you leave this page, you can find your place again at{" "}
+            <a href={lookupUrl} className="font-semibold text-brand hover:underline">
+              {lookupUrl.replace(/^https?:\/\//, "")}
+            </a>{" "}
+            using your reference code above.
+          </li>
+          <li>
+            If you have any questions, speak to a member of staff at the front desk.
+          </li>
+        </ul>
       </section>
-
-      <p className="mt-8 text-sm text-slate-600">
-        Take a seat in the waiting area. You will be called by name when it is your turn.
-        If you have any questions, speak to a member of staff at the front desk and show
-        them your reference code.
-      </p>
 
       <PoweredBy className="mt-12" />
     </main>

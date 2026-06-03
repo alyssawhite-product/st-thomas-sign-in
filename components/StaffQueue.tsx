@@ -137,14 +137,26 @@ export function StaffQueue({ initialEntries, role, email }: Props) {
   // Visual banner only -- no audio. (Audio alerts proved unreliable in
   // the demo; staff feedback can re-add it if needed.)
 
-  // Stats: Waiting / Called / Seen. The "Called" bucket spans every
-  // in-progress sub-stage (called, at_records, with_nurse, with_doctor).
+  // EE12: tab labels carry the per-bucket counts; we don't need a
+  // duplicate stat grid. Kept only the "Avg wait" + "Seen" headline
+  // metrics which aren't shown in the tabs.
   const isInProgress = (e: QueueEntry) => CLINIC_IN_PROGRESS.includes(e.status);
-  const stats = useMemo(() => ({
-    waiting: clinicalEntries.filter((e) => e.status === "waiting").length,
-    called: clinicalEntries.filter(isInProgress).length,
-    seen: clinicalEntries.filter((e) => e.status === "seen").length,
-  }), [clinicalEntries]);
+
+  // EE-wait: average time between arrival (created_at) and first call
+  // (called_at), in whole minutes. Only counted for entries that have
+  // actually been called -- gives staff a feel for how the room is
+  // moving today. Visible to staff only; not exposed on /display.
+  const avgWaitMinutes = useMemo(() => {
+    const calledOrSeen = clinicalEntries.filter(
+      (e) => e.called_at && e.created_at,
+    );
+    if (calledOrSeen.length === 0) return null;
+    const totalMs = calledOrSeen.reduce((acc, e) => {
+      const wait = new Date(e.called_at as string).getTime() - new Date(e.created_at).getTime();
+      return acc + Math.max(0, wait);
+    }, 0);
+    return Math.round(totalMs / calledOrSeen.length / 60_000);
+  }, [clinicalEntries]);
 
   // Tab partitions
   const byTab: Record<Tab, QueueEntry[]> = useMemo(() => ({
@@ -227,10 +239,14 @@ export function StaffQueue({ initialEntries, role, email }: Props) {
         </div>
       )}
 
-      <div className="mt-6 grid grid-cols-3 gap-4 text-center">
-        <Stat label="Waiting" value={stats.waiting} />
-        <Stat label="Called" value={stats.called} />
-        <Stat label="Seen" value={stats.seen} />
+      {/* EE12 + EE-wait: tabs already carry Waiting/Called/Seen
+          counts. Headline strip surfaces the one number the tabs
+          don't: how long patients are actually waiting today. */}
+      <div className="mt-6 rounded-lg border border-slate-200 bg-white p-4 text-sm text-slate-600">
+        <span className="font-semibold text-slate-800">Average wait today:</span>{" "}
+        {avgWaitMinutes === null
+          ? "—  (no patients called yet)"
+          : <>{avgWaitMinutes} minute{avgWaitMinutes === 1 ? "" : "s"} from check-in to first call</>}
       </div>
 
       <div className="mt-6 flex flex-wrap gap-2">
@@ -251,9 +267,9 @@ export function StaffQueue({ initialEntries, role, email }: Props) {
         <nav className="-mb-px flex gap-6">
           {(["waiting", "called", "seen"] as Tab[]).map((t) => {
             const labelMap: Record<Tab, string> = {
-              waiting: `Waiting (${stats.waiting})`,
-              called: `Called (${stats.called})`,
-              seen: `Seen (${stats.seen})`,
+              waiting: `Waiting (${byTab.waiting.length})`,
+              called: `Called (${byTab.called.length})`,
+              seen: `Seen (${byTab.seen.length})`,
             };
             const active = activeTab === t;
             return (
@@ -316,19 +332,19 @@ export function StaffQueue({ initialEntries, role, email }: Props) {
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="text-lg font-semibold">{e.name}</span>
-                      {/* Urgent sits right next to the name so it's the
-                          first thing a clinician reaches for if the
-                          patient deteriorates while waiting. One click =
-                          flips priority + calls them to the Nurse. */}
+                      {/* EE4: distinct button styling — outlined + chevron
+                          so it doesn't visually fight the WAITING /
+                          PRIORITY badges next to it. Still adjacent to
+                          the name for quick access. */}
                       {e.status === "waiting" && !e.priority && (
                         <button
                           type="button"
                           disabled={pending}
                           onClick={() => handleMarkUrgent(e.id)}
-                          className="rounded-md bg-red-600 px-2.5 py-0.5 text-xs font-bold uppercase tracking-wider text-white shadow hover:bg-red-700 disabled:opacity-50"
+                          className="rounded-md border border-red-600 px-2.5 py-1 text-xs font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"
                           title="Mark urgent — automatically calls this patient to the Nurse"
                         >
-                          Urgent
+                          ⚠ Mark urgent
                         </button>
                       )}
                       <span
@@ -364,6 +380,14 @@ export function StaffQueue({ initialEntries, role, email }: Props) {
                     {e.priority && e.priority_reason && (
                       <p className="mt-1 text-xs text-red-700">
                         Priority reason: {e.priority_reason}
+                      </p>
+                    )}
+                    {/* EE5: surface the "Other" reason inline so the
+                        clinician knows what the patient came in for. */}
+                    {e.visit_type === "other" && (e as { other_reason?: string | null }).other_reason && (
+                      <p className="mt-1 text-xs text-slate-700">
+                        <span className="font-semibold">Reason: </span>
+                        {(e as { other_reason?: string | null }).other_reason}
                       </p>
                     )}
                   </div>
@@ -497,15 +521,6 @@ export function StaffQueue({ initialEntries, role, email }: Props) {
 
       <PoweredBy className="mt-12" />
     </main>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-lg bg-slate-50 p-4">
-      <div className="text-3xl font-bold">{value}</div>
-      <div className="text-sm text-slate-600">{label}</div>
-    </div>
   );
 }
 

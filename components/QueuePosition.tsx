@@ -295,31 +295,46 @@ export function QueuePosition({ initialEntry, initialAhead }: Props) {
           )}
         </section>
       )}
+      {/* EE3: ticket is the primary identity (matches what the
+          display calls out). Position is a smaller supporting line so
+          patients aren't confused by two big numbers. */}
       <section className="rounded-xl bg-brand-light p-8 text-center">
         {state.ticketNumber !== null && (
           <>
             <p className="text-sm font-semibold uppercase tracking-wide text-brand">
               Your ticket
             </p>
-            <p className="mt-1 text-5xl font-black text-brand-dark">
+            <p className="mt-1 text-7xl font-black text-brand-dark">
               #{state.ticketNumber}
             </p>
           </>
         )}
-        <p className="mt-4 text-sm font-semibold uppercase tracking-wide text-brand">
-          Your queue position
-        </p>
-        <p className="mt-1 text-6xl font-bold text-brand-dark">{position}</p>
-        <p className="mt-3 text-slate-700">
+        <p className="mt-5 text-slate-700">
           {state.ahead === 0
-            ? "You're next."
-            : `${state.ahead} ${state.ahead === 1 ? "person" : "people"} ahead of you`}
+            ? <>You&apos;re next in line.</>
+            : <>
+                You&apos;re position <strong>{position}</strong> — {state.ahead} {state.ahead === 1 ? "person" : "people"} ahead of you.
+              </>}
         </p>
         {state.ahead > 0 && (
           <p className="mt-1 text-sm text-slate-500">
-            Estimated wait: about {wait} minute{wait === 1 ? "" : "s"}
+            Rough wait: about {wait} minute{wait === 1 ? "" : "s"}
           </p>
         )}
+      </section>
+      {/* EE13: reference token gets its own card so it's impossible
+          to miss. This is the patient's recovery key if they lose
+          the page. */}
+      <section className="mt-6 rounded-xl border border-slate-300 bg-white p-5 text-center">
+        <p className="text-sm font-semibold uppercase tracking-wide text-slate-500">
+          Your reference code
+        </p>
+        <p className="mt-1 font-mono text-3xl font-bold tracking-widest text-slate-800">
+          {initialEntry.token}
+        </p>
+        <p className="mt-2 text-sm text-slate-600">
+          Write this down. You can use it to find your place again from any phone.
+        </p>
       </section>
       <TransferForm token={initialEntry.token} currentVisitType={state.visitType} />
       <RequestHelpButton token={initialEntry.token} alreadyRequested={helpRequested} />
@@ -329,14 +344,24 @@ export function QueuePosition({ initialEntry, initialAhead }: Props) {
   );
 }
 
-// BB6: visible "New check-in" link for shared kiosks. Always present
-// on the patient queue page below the request-help block. The kiosk
-// auto-timeout still applies separately when kiosk mode is enabled.
+// BB6 + EE7: visible "New check-in" link for shared kiosks. Confirms
+// before navigating away so a personal-phone user doesn't lose their
+// queue position view by accident.
 function NewCheckInLink() {
+  function onClick(e: React.MouseEvent) {
+    if (
+      !window.confirm(
+        "Start a new check-in? Your current queue position will still be saved — you can come back using your reference code.",
+      )
+    ) {
+      e.preventDefault();
+    }
+  }
   return (
     <div className="mt-6 text-center">
       <a
         href="/"
+        onClick={onClick}
         className="inline-block rounded-md border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
       >
         Check in another patient →
@@ -436,6 +461,22 @@ function TransferForm({ token, currentVisitType }: { token: string; currentVisit
   const others = DEPARTMENTS.filter((d) => d.stream !== currentStream);
 
   function onTransfer(visitType: string, hasPrescription?: string) {
+    // EE7: confirm before moving. Patients on shared kiosks tap by
+    // accident; a confirm step costs nothing and avoids losing their
+    // place in the original queue.
+    const destLabel =
+      visitType === "pharmacy"
+        ? "Pharmacy"
+        : visitType === "general" || visitType === "follow-up"
+        ? "General Clinic"
+        : "the new department";
+    if (
+      !window.confirm(
+        `Move to ${destLabel}? You'll get a new ticket and be placed at the back of that queue.`,
+      )
+    ) {
+      return;
+    }
     setError(null);
     const fd = new FormData();
     fd.set("token", token);

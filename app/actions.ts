@@ -44,6 +44,7 @@ export async function signInAction(formData: FormData): Promise<void> {
   const idNumber = String(formData.get("id_number") ?? "").trim();
   const visitType = String(formData.get("visit_type") ?? "").trim();
   const rawPrescription = String(formData.get("has_prescription") ?? "").trim();
+  const otherReason = String(formData.get("other_reason") ?? "").trim();
 
   // Server-side validation is the source of truth. Client mirrors these
   // checks for inline UX; if anything slips past the client, we still
@@ -106,6 +107,7 @@ export async function signInAction(formData: FormData): Promise<void> {
     hasPrescription,
     nationality,
     countryOfOrigin,
+    otherReason: visitType === "other" ? (otherReason || null) : null,
   });
   redirect(`/queue/${entry.token}`);
 }

@@ -52,7 +52,8 @@ type FieldKey =
   | "id_number"
   | "visit_type"
   | "consultation_type"
-  | "has_prescription";
+  | "has_prescription"
+  | "other_reason";
 
 interface DuplicateError {
   kind: "duplicate";
@@ -67,6 +68,7 @@ const FIELD_META: Record<FieldKey, { anchor: string; label: string }> = {
   visit_type: { anchor: "visit_type_general_clinic", label: "Type of visit" },
   consultation_type: { anchor: "consultation_type_general", label: "Consultation type" },
   has_prescription: { anchor: "has_prescription_yes", label: "Prescription" },
+  other_reason: { anchor: "other_reason", label: "What brings you in today?" },
 };
 
 function validate({
@@ -78,6 +80,7 @@ function validate({
   topLevelVisit,
   consultationType,
   hasPrescription,
+  otherReason,
 }: {
   name: string;
   nationality: string;
@@ -87,6 +90,7 @@ function validate({
   topLevelVisit: string;
   consultationType: string;
   hasPrescription: string;
+  otherReason: string;
 }): Partial<Record<FieldKey, string>> {
   const errors: Partial<Record<FieldKey, string>> = {};
   if (name.trim().length < 2) {
@@ -102,7 +106,9 @@ function validate({
   if (nationality === "non_national" && country === "OTHER" && !otherCountry.trim()) {
     errors.country_of_origin = "Enter the name of your country.";
   }
-  if (!idNumber.trim()) {
+  // EE8: ID number is only required once a nationality has been chosen
+  // (we hide the field otherwise).
+  if (nationality && !idNumber.trim()) {
     errors.id_number = "Enter your ID number.";
   }
   if (!topLevelVisit) {
@@ -117,6 +123,11 @@ function validate({
   if (topLevelVisit === "pharmacy" && !hasPrescription) {
     errors.has_prescription = "Tell us about your prescription.";
   }
+  // EE5: "Other" needs a short reason so clinicians know what the
+  // patient came in for.
+  if (topLevelVisit === "other" && !otherReason.trim()) {
+    errors.other_reason = "Tell us briefly what brings you in.";
+  }
   return errors;
 }
 
@@ -129,9 +140,14 @@ export function SignInForm({ kiosk }: Props) {
   // name in this field. We send it through as country_of_origin.
   const [otherCountry, setOtherCountry] = useState<string>("");
   // For non-nationals only. Nationals are forced to national_id.
-  const [idType, setIdType] = useState<"national_id" | "passport">("national_id");
+  // EE9: default Non-Nationals to Passport (more universal than a
+  // foreign national ID, and avoids the "I don't have a Barbadian
+  // National ID" confusion).
+  const [idType, setIdType] = useState<"national_id" | "passport">("passport");
   const [name, setName] = useState("");
   const [idNumber, setIdNumber] = useState("");
+  // EE5: free-text reason captured when the user picks "Other".
+  const [otherReason, setOtherReason] = useState("");
   // topLevelVisit is the UI grouping (general_clinic | pharmacy | other).
   // consultationType is the sub-choice when General Clinic is picked. On
   // submit we collapse these to the underlying visit_type column.
@@ -168,14 +184,24 @@ export function SignInForm({ kiosk }: Props) {
       topLevelVisit,
       consultationType,
       hasPrescription,
+      otherReason,
     });
     setErrors(fieldErrors);
     setDuplicateError(null);
     setGenericError(null);
 
     if (Object.keys(fieldErrors).length > 0) {
+      // EE6: prefix the document title so screen readers announce the
+      // state change on next focus.
+      if (typeof document !== "undefined" && !document.title.startsWith("Error:")) {
+        document.title = "Error: " + document.title;
+      }
       setTimeout(() => summaryRef.current?.focus(), 0);
       return;
+    }
+    // Clear the error prefix once validation passes.
+    if (typeof document !== "undefined" && document.title.startsWith("Error:")) {
+      document.title = document.title.replace(/^Error:\s*/, "");
     }
 
     // Nationals are always identified by Barbados National ID; non-nationals
@@ -202,6 +228,11 @@ export function SignInForm({ kiosk }: Props) {
     fd.set("id_number", idNumber.trim());
     fd.set("visit_type", effectiveVisitType);
     if (effectiveVisitType === "pharmacy") fd.set("has_prescription", hasPrescription);
+    // EE5: ship the "Other" reason through so the clinic dashboard
+    // can show it on the row.
+    if (effectiveVisitType === "other" && otherReason.trim()) {
+      fd.set("other_reason", otherReason.trim());
+    }
 
     startTransition(async () => {
       try {
@@ -293,13 +324,16 @@ export function SignInForm({ kiosk }: Props) {
           <ul className="mt-2 list-disc space-y-1 pl-5 text-sm text-red-700">
             {visibleErrors.map((k) => (
               <li key={k}>
+                {/* EE6: link text is the FIELD LABEL (GDS pattern),
+                    error sentence follows as plain text. */}
                 <button
                   type="button"
                   onClick={() => focusField(FIELD_META[k].anchor)}
                   className="font-medium text-red-700 underline hover:text-red-900"
                 >
-                  {errors[k]}
+                  {FIELD_META[k].label}
                 </button>
+                <span>: {errors[k]}</span>
               </li>
             ))}
             {duplicateError && (
@@ -362,6 +396,7 @@ export function SignInForm({ kiosk }: Props) {
                 setNationality("national");
                 setIdType("national_id");
                 setCountry("");
+                setOtherCountry("");
                 clearError("nationality");
               }}
               className="h-5 w-5 shrink-0 accent-brand"
@@ -377,6 +412,9 @@ export function SignInForm({ kiosk }: Props) {
               checked={nationality === "non_national"}
               onChange={() => {
                 setNationality("non_national");
+                // EE9: Non-Nationals default to Passport. The user can
+                // still pick National ID explicitly.
+                setIdType("passport");
                 clearError("nationality");
               }}
               className="h-5 w-5 shrink-0 accent-brand"
@@ -436,7 +474,10 @@ export function SignInForm({ kiosk }: Props) {
           </div>
 
           <div>
-            <span className="field-label block mb-2">Identification type</span>
+            <span className="field-label block">Identification document</span>
+            <p className="mb-2 text-sm text-slate-500">
+              We&apos;ll use this to find or create your record.
+            </p>
             <div className="flex gap-3">
               <label className="flex cursor-pointer items-center gap-2 rounded-md border px-4 py-2.5 text-sm font-medium has-[:checked]:border-brand has-[:checked]:bg-brand-light border-slate-300">
                 <input
@@ -465,44 +506,48 @@ export function SignInForm({ kiosk }: Props) {
         </>
       )}
 
-      {/* ID number -- label adapts to the chosen branch. */}
-      <div>
-        <label htmlFor="id_number" className="field-label">
-          {idNumberLabel}
-        </label>
-        <input
-          id="id_number"
-          name="id_number"
-          type="text"
-          maxLength={30}
-          className={`field-input ${errors.id_number || duplicateError ? "border-red-500" : ""}`}
-          placeholder={idNumberPlaceholder}
-          value={idNumber}
-          onChange={(e) => {
-            setIdNumber(e.target.value);
-            clearError("id_number");
-          }}
-          aria-invalid={!!errors.id_number || !!duplicateError}
-          aria-describedby={errors.id_number ? "id_number-error" : undefined}
-        />
-        {errors.id_number && (
-          <p id="id_number-error" className="mt-1 text-sm font-medium text-red-700">
-            {errors.id_number}
-          </p>
-        )}
-        {duplicateError && (
-          <p className="mt-1 text-sm font-medium text-red-700">
-            This ID number is already checked in today.{" "}
-            <Link
-              href={`/lookup?q=${encodeURIComponent(duplicateError.idNumber)}`}
-              className="font-semibold underline hover:text-red-900"
-            >
-              Find your place in the queue
-            </Link>{" "}
-            below.
-          </p>
-        )}
-      </div>
+      {/* EE8: ID number is only shown once nationality is picked, so
+          the label can be specific to the branch and we don't ask
+          before knowing which document to ask for. */}
+      {nationality && (
+        <div>
+          <label htmlFor="id_number" className="field-label">
+            {idNumberLabel}
+          </label>
+          <input
+            id="id_number"
+            name="id_number"
+            type="text"
+            maxLength={30}
+            className={`field-input ${errors.id_number || duplicateError ? "border-red-500" : ""}`}
+            placeholder={idNumberPlaceholder}
+            value={idNumber}
+            onChange={(e) => {
+              setIdNumber(e.target.value);
+              clearError("id_number");
+            }}
+            aria-invalid={!!errors.id_number || !!duplicateError}
+            aria-describedby={errors.id_number ? "id_number-error" : undefined}
+          />
+          {errors.id_number && (
+            <p id="id_number-error" className="mt-1 text-sm font-medium text-red-700">
+              {errors.id_number}
+            </p>
+          )}
+          {duplicateError && (
+            <p className="mt-1 text-sm font-medium text-red-700">
+              This ID number is already checked in today.{" "}
+              <Link
+                href={`/lookup?q=${encodeURIComponent(duplicateError.idNumber)}`}
+                className="font-semibold underline hover:text-red-900"
+              >
+                Find your place in the queue
+              </Link>{" "}
+              below.
+            </p>
+          )}
+        </div>
+      )}
 
       <fieldset>
         <legend className="field-label">Type of visit</legend>
@@ -538,6 +583,36 @@ export function SignInForm({ kiosk }: Props) {
           <p className="mt-2 text-sm font-medium text-red-700">{errors.visit_type}</p>
         )}
       </fieldset>
+
+      {/* EE5: capture a free-text reason for "Other" so the clinician
+          sees what the patient came in for instead of just "other". */}
+      {topLevelVisit === "other" && (
+        <div>
+          <label htmlFor="other_reason" className="field-label">
+            What brings you in today?
+          </label>
+          <p className="mb-2 text-sm text-slate-500">
+            A short note so the clinician knows what to expect.
+          </p>
+          <textarea
+            id="other_reason"
+            name="other_reason"
+            rows={3}
+            maxLength={200}
+            placeholder="e.g. Vaccination certificate, ear infection follow-up, lab test pickup"
+            className={`field-input ${errors.other_reason ? "border-red-500" : ""}`}
+            value={otherReason}
+            onChange={(e) => {
+              setOtherReason(e.target.value);
+              clearError("other_reason");
+            }}
+            aria-invalid={!!errors.other_reason}
+          />
+          {errors.other_reason && (
+            <p className="mt-1 text-sm font-medium text-red-700">{errors.other_reason}</p>
+          )}
+        </div>
+      )}
 
       {topLevelVisit === "general_clinic" && (
         <fieldset>

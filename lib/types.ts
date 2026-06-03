@@ -49,6 +49,10 @@ export interface QueueEntry {
   // Stamped when a patient presses Request Help on their phone. The
   // clinic dashboard uses this to surface a 🆘 banner on the row.
   help_requested_at?: string | null;
+  // Free-text "what brings you in" reason captured when visit_type is
+  // "other". Shown on the staff row so the clinician knows what the
+  // patient is here for.
+  other_reason?: string | null;
 }
 
 export interface StaffUser {

@@ -17,14 +17,15 @@ export function StaffLogin({ error }: Props) {
   const msg = errorMessage(error);
   return (
     <main className="mx-auto flex min-h-screen max-w-sm flex-col justify-center px-6 py-10">
-      <h1 className="text-2xl font-bold">Clinic sign-in</h1>
+      <h1 className="text-2xl font-bold">Staff sign-in</h1>
       <p className="mt-2 text-slate-600">
-        Sign in with your clinic email to access the queue dashboard.
+        Sign in with your work email. Clinicians go to the Clinic dashboard, pharmacists go to the
+        Pharmacy dashboard, admins go to either.
       </p>
 
       <form action={staffLoginAction} className="mt-6 space-y-4">
         <div>
-          <label htmlFor="email" className="field-label">Email</label>
+          <label htmlFor="email" className="field-label">Work email</label>
           <input
             id="email"
             name="email"
@@ -46,7 +47,7 @@ export function StaffLogin({ error }: Props) {
           />
         </div>
         {msg && (
-          <p role="alert" className="rounded-md bg-red-50 px-4 py-3 text-red-700">
+          <p role="alert" className="rounded-md border-l-4 border-red-600 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">
             {msg}
           </p>
         )}
