@@ -61,7 +61,13 @@ export async function signInAction(formData: FormData): Promise<void> {
   if (nationality === "national") {
     effectiveIdType = "national_id";
   } else {
-    if (!COUNTRY_VALUES.includes(rawCountry)) {
+    // BB7: accept either a known country code OR a free-text country
+    // name (when the user picked "Other" on the dropdown). The form
+    // sends the typed name directly as country_of_origin -- no
+    // "OTHER:" prefix.
+    const knownCode = COUNTRY_VALUES.includes(rawCountry);
+    const validFreeText = rawCountry.length > 0 && rawCountry.length <= 80;
+    if (!knownCode && !validFreeText) {
       throw new Error("COUNTRY_REQUIRED");
     }
     countryOfOrigin = rawCountry;

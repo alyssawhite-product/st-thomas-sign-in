@@ -73,6 +73,7 @@ function validate({
   name,
   nationality,
   country,
+  otherCountry,
   idNumber,
   topLevelVisit,
   consultationType,
@@ -81,6 +82,7 @@ function validate({
   name: string;
   nationality: string;
   country: string;
+  otherCountry: string;
   idNumber: string;
   topLevelVisit: string;
   consultationType: string;
@@ -95,6 +97,10 @@ function validate({
   }
   if (nationality === "non_national" && !country) {
     errors.country_of_origin = "Choose your country of origin.";
+  }
+  // BB7: if dropdown is OTHER, require the free-text input.
+  if (nationality === "non_national" && country === "OTHER" && !otherCountry.trim()) {
+    errors.country_of_origin = "Enter the name of your country.";
   }
   if (!idNumber.trim()) {
     errors.id_number = "Enter your ID number.";
@@ -119,6 +125,9 @@ export function SignInForm({ kiosk }: Props) {
   // Nationality drives which ID-type controls are visible.
   const [nationality, setNationality] = useState<"" | "national" | "non_national">("");
   const [country, setCountry] = useState<string>("");
+  // BB7: when the dropdown is "OTHER", the user types their country
+  // name in this field. We send it through as country_of_origin.
+  const [otherCountry, setOtherCountry] = useState<string>("");
   // For non-nationals only. Nationals are forced to national_id.
   const [idType, setIdType] = useState<"national_id" | "passport">("national_id");
   const [name, setName] = useState("");
@@ -154,6 +163,7 @@ export function SignInForm({ kiosk }: Props) {
       name,
       nationality,
       country,
+      otherCountry,
       idNumber,
       topLevelVisit,
       consultationType,
@@ -182,7 +192,12 @@ export function SignInForm({ kiosk }: Props) {
     const fd = new FormData();
     fd.set("name", name.trim());
     fd.set("nationality", nationality);
-    if (nationality === "non_national") fd.set("country_of_origin", country);
+    if (nationality === "non_national") {
+      // BB7: send the typed country name when "Other" was picked, so
+      // we capture the actual nationality instead of literal "OTHER".
+      const effectiveCountry = country === "OTHER" ? otherCountry.trim() : country;
+      fd.set("country_of_origin", effectiveCountry);
+    }
     fd.set("id_type", effectiveIdType);
     fd.set("id_number", idNumber.trim());
     fd.set("visit_type", effectiveVisitType);
@@ -388,6 +403,7 @@ export function SignInForm({ kiosk }: Props) {
               value={country}
               onChange={(e) => {
                 setCountry(e.target.value);
+                if (e.target.value !== "OTHER") setOtherCountry("");
                 clearError("country_of_origin");
               }}
               aria-invalid={!!errors.country_of_origin}
@@ -399,6 +415,21 @@ export function SignInForm({ kiosk }: Props) {
                 </option>
               ))}
             </select>
+            {country === "OTHER" && (
+              <input
+                id="country_of_origin_other"
+                type="text"
+                maxLength={80}
+                placeholder="Type your country, e.g. France"
+                className={`field-input mt-2 ${errors.country_of_origin ? "border-red-500" : ""}`}
+                value={otherCountry}
+                onChange={(e) => {
+                  setOtherCountry(e.target.value);
+                  clearError("country_of_origin");
+                }}
+                aria-label="Country of origin (free text)"
+              />
+            )}
             {errors.country_of_origin && (
               <p className="mt-1 text-sm font-medium text-red-700">{errors.country_of_origin}</p>
             )}

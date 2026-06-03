@@ -76,6 +76,9 @@
         <select id="si-country" class="field-input">
           <option value="">Choose a country…</option>
         </select>
+        <!-- BB7: free-text input shown when "Other" is selected so we
+             capture the actual country name instead of literal OTHER. -->
+        <input id="si-country-other" type="text" maxlength="80" placeholder="Type your country, e.g. France" class="field-input mt-2 hidden" />
         <p id="si-country-error" class="mt-1 hidden text-sm font-medium text-red-700"></p>
       </div>
 
@@ -198,6 +201,13 @@
       If you have any questions, speak to a member of staff at the front desk and show
       them your reference code.
     </p>
+    <!-- BB6: explicit "New check-in" button so a shared-kiosk user can
+         start over without instructions. -->
+    <div class="mt-6 text-center">
+      <button type="button" data-go="signin" class="nav-btn inline-block rounded-md border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50">
+        Check in another patient →
+      </button>
+    </div>
     <div data-powered-by="light" class="mt-12"></div>
   </main>
 </section>
@@ -242,7 +252,7 @@
         <label class="field-label">Password</label>
         <input id="sl-password" type="password" required class="field-input" />
       </div>
-      <div id="sl-error" role="alert" class="hidden rounded-md bg-red-50 px-4 py-3 text-red-700"></div>
+      <div id="sl-error" role="alert" class="hidden rounded-md border-l-4 border-red-600 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800"></div>
       <button type="submit" class="btn-primary w-full">Sign in</button>
     </form>
     <div data-powered-by="light" class="mt-10"></div>
@@ -632,6 +642,18 @@ function streamFor(visitType) {
 function streamLabel(s) {
   return s === 'pharmacy' ? 'Pharmacy' : 'General Clinic';
 }
+// BB1/BB5: friendly label for the visit_type column. Lowercase
+// underlying values become title-cased patient-facing copy.
+function friendlyVisitType(visitType) {
+  if (!visitType) return null;
+  switch (visitType) {
+    case 'general': return 'General consultation';
+    case 'follow-up': return 'Follow-up';
+    case 'pharmacy': return 'Pharmacy';
+    case 'other': return 'Other';
+    default: return visitType;
+  }
+}
 
 // Two patient-facing departments; transfer dropdowns offer the other one.
 const DEPARTMENTS = [
@@ -914,7 +936,19 @@ function renderSigninForm() {
       opt.textContent = c.label;
       countrySel.appendChild(opt);
     });
-    countrySel.addEventListener('change', () => siClearFieldError('country'));
+    // BB7: toggle the free-text fallback when "Other" is selected.
+    const otherInput = document.getElementById('si-country-other');
+    countrySel.addEventListener('change', () => {
+      siClearFieldError('country');
+      if (countrySel.value === 'OTHER') {
+        otherInput.classList.remove('hidden');
+        otherInput.focus();
+      } else {
+        otherInput.classList.add('hidden');
+        otherInput.value = '';
+      }
+    });
+    otherInput.addEventListener('input', () => siClearFieldError('country'));
   }
 
   // Nationality radios show/hide country + ID-type, and tweak ID label.
@@ -1058,7 +1092,10 @@ document.getElementById('signin-form').addEventListener('submit', (e) => {
 
   const name = document.getElementById('si-name').value;
   const nationality = document.querySelector('input[name="si-nationality"]:checked')?.value || '';
-  const country = document.getElementById('si-country').value;
+  const countryRaw = document.getElementById('si-country').value;
+  const otherCountry = document.getElementById('si-country-other').value.trim();
+  // BB7: if "Other" was picked, the typed name becomes the country.
+  const country = countryRaw === 'OTHER' ? otherCountry : countryRaw;
   // Nationals are always national_id; non-nationals respect the radio.
   const idType = nationality === 'national'
     ? 'national_id'
@@ -1086,8 +1123,13 @@ document.getElementById('signin-form').addEventListener('submit', (e) => {
     siShowFieldError('nationality', 'Tell us whether you are a national or non-national.');
     hasError = true;
   }
-  if (nationality === 'non_national' && !country) {
+  if (nationality === 'non_national' && !countryRaw) {
     siShowFieldError('country', 'Choose your country of origin.');
+    hasError = true;
+  }
+  // BB7: if Other was picked, the typed input must be non-empty.
+  if (nationality === 'non_national' && countryRaw === 'OTHER' && !otherCountry) {
+    siShowFieldError('country', 'Enter the name of your country.');
     hasError = true;
   }
   if (!idNumber) {
@@ -1135,6 +1177,8 @@ document.getElementById('signin-form').addEventListener('submit', (e) => {
   document.getElementById('signin-form').reset();
   // Reset visibility states
   document.getElementById('si-country-row').classList.add('hidden');
+  document.getElementById('si-country-other').classList.add('hidden');
+  document.getElementById('si-country-other').value = '';
   document.getElementById('si-id-type-row').classList.add('hidden');
   document.getElementById('si-consultation-fs').classList.add('hidden');
   document.querySelector('input[name="si-id-type"][value="national_id"]').checked = true;
@@ -1219,7 +1263,7 @@ function renderQueue() {
 
   greet.textContent = `Hi, ${entry.name.split(' ')[0]}`;
   ref.textContent = entry.token;
-  visit.textContent = entry.visit_type;
+  visit.textContent = friendlyVisitType(entry.visit_type) || entry.visit_type;
 
   // Subtle "Checked in as: ... · National ID: ending …XYZ" summary
   if (summary) {
@@ -1285,7 +1329,19 @@ function renderQueue() {
     ).length;
     const position = ahead + 1;
     const wait = ahead * 8;
+    // BB5: if the patient was just transferred, show a clear "You've
+    // been moved" confirmation above the queue position so they know
+    // their action took effect.
+    const fromLabel = friendlyVisitType(entry.transferred_from);
+    const toLabel = friendlyVisitType(entry.visit_type);
+    const transferConfirm = fromLabel ? `
+      <section class="mb-4 rounded-xl border-2 border-emerald-300 bg-emerald-50 p-5 text-center">
+        <p class="text-sm font-semibold uppercase tracking-wider text-emerald-700">You've been moved</p>
+        <p class="mt-1 text-lg font-semibold text-emerald-900">From ${escapeHtml(fromLabel)} → ${escapeHtml(toLabel)}</p>
+        ${entry.ticket_number != null ? `<p class="mt-1 text-sm text-emerald-800">Your new ticket is <span class="font-mono font-bold">#${entry.ticket_number}</span>.</p>` : ''}
+      </section>` : '';
     box.innerHTML = `
+      ${transferConfirm}
       <section class="rounded-xl bg-brand-light p-8 text-center">
         ${ticketLineWaiting}
         <p class="${entry.ticket_number != null ? 'mt-4 ' : ''}text-sm font-semibold uppercase tracking-wide text-brand">Your queue position</p>
@@ -1626,10 +1682,23 @@ function renderDisplay() {
 document.getElementById('staff-login-form').addEventListener('submit', (e) => {
   e.preventDefault();
   const email = document.getElementById('sl-email').value.trim();
-  const password = document.getElementById('sl-password').value;
-  const acc = STAFF_ACCOUNTS.find(a => a.email === email && a.password === password);
+  // Trim password too -- mobile keyboards / paste from chat tools
+  // sometimes append a stray space which silently broke login.
+  const password = document.getElementById('sl-password').value.trim();
   const err = document.getElementById('sl-error');
-  if (!acc) { err.textContent = 'Email or password is incorrect.'; err.classList.remove('hidden'); return; }
+  // Email is canonical lowercase; matching is case-insensitive so an
+  // accidental capital letter doesn't bounce the user.
+  const normEmail = email.toLowerCase();
+  const acc = STAFF_ACCOUNTS.find(a => a.email.toLowerCase() === normEmail && a.password === password);
+  if (!acc) {
+    err.textContent = 'Email or password is incorrect. Try again.';
+    err.classList.remove('hidden');
+    err.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    // Clear password but keep email so the user can retype just the password.
+    document.getElementById('sl-password').value = '';
+    document.getElementById('sl-password').focus();
+    return;
+  }
   state.staff = { email: acc.email, role: acc.role };
   save();
   document.getElementById('staff-login-form').reset();
@@ -1669,15 +1738,26 @@ function renderStaff() {
     { id: 'called', label: `Called (${stats.called})` },
     { id: 'seen', label: `Seen (${stats.seen})` },
   ];
-  document.getElementById('staff-tabs').innerHTML = tabs.map(t => {
+  const tabsEl = document.getElementById('staff-tabs');
+  // BB2: stronger active styling (background bar + bolder text) so it's
+  // obvious which tab is selected, and event delegation on the stable
+  // container so click handling doesn't depend on listener attachment
+  // surviving each render.
+  tabsEl.innerHTML = tabs.map(t => {
     const active = staffActiveTab === t.id;
-    return `<button type="button" data-staff-tab="${t.id}" class="-mb-px border-b-2 px-1 pb-3 text-sm font-semibold ${
-      active ? 'border-brand text-brand' : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700'
+    return `<button type="button" data-staff-tab="${t.id}" class="-mb-px border-b-2 px-3 pb-3 pt-1 text-sm font-semibold transition ${
+      active ? 'border-brand text-brand bg-brand-light/40 rounded-t-md' : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700'
     }">${t.label}</button>`;
   }).join('');
-  document.querySelectorAll('[data-staff-tab]').forEach(b => {
-    b.addEventListener('click', () => { staffActiveTab = b.dataset.staffTab; renderStaff(); });
-  });
+  if (!tabsEl.dataset.delegated) {
+    tabsEl.dataset.delegated = '1';
+    tabsEl.addEventListener('click', (ev) => {
+      const btn = ev.target.closest('[data-staff-tab]');
+      if (!btn || !tabsEl.contains(btn)) return;
+      staffActiveTab = btn.dataset.staffTab;
+      renderStaff();
+    });
+  }
 
   const byTab = {
     waiting: clinicalEntries.filter(e => e.status === 'waiting').sort(sortQueueOrder),
@@ -1764,7 +1844,7 @@ function staffRow(e) {
           ${e.transferred_from ? `<span class="rounded-full bg-slate-200 px-2 py-0.5 text-[11px] font-medium text-slate-700">← ${e.transferred_from}</span>` : ''}
         </div>
         <p class="mt-1 text-sm text-slate-500">
-          ${e.visit_type} · ${e.id_type === 'passport' ? 'Passport' : 'National ID'}: ${escapeHtml(e.id_number)} · Ref: <span class="font-mono tracking-widest">${e.token}</span>
+          ${escapeHtml(friendlyVisitType(e.visit_type) || e.visit_type)} · ${e.id_type === 'passport' ? 'Passport' : 'National ID'}: ${escapeHtml(e.id_number)} · Ref: <span class="font-mono tracking-widest">${e.token}</span>
         </p>
         ${e.priority && e.priority_reason ? `<p class="mt-1 text-xs text-red-700">Priority reason: ${escapeHtml(e.priority_reason)}</p>` : ''}
       </div>
@@ -1869,15 +1949,22 @@ function renderPharmacy() {
     { id: 'preparing', label: `Being Prepared (${byTab.preparing.length})` },
     { id: 'served', label: `Served (${byTab.served.length})` },
   ];
-  document.getElementById('pharm-tabs').innerHTML = tabs.map(t => {
+  const pTabsEl = document.getElementById('pharm-tabs');
+  pTabsEl.innerHTML = tabs.map(t => {
     const active = pharmActiveTab === t.id;
-    return `<button type="button" data-pharm-tab="${t.id}" class="-mb-px border-b-2 px-1 pb-3 text-sm font-semibold ${
-      active ? 'border-brand text-brand' : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700'
+    return `<button type="button" data-pharm-tab="${t.id}" class="-mb-px border-b-2 px-3 pb-3 pt-1 text-sm font-semibold transition ${
+      active ? 'border-brand text-brand bg-brand-light/40 rounded-t-md' : 'border-transparent text-slate-500 hover:border-slate-300 hover:text-slate-700'
     }">${t.label}</button>`;
   }).join('');
-  document.querySelectorAll('[data-pharm-tab]').forEach(b => {
-    b.addEventListener('click', () => { pharmActiveTab = b.dataset.pharmTab; renderPharmacy(); });
-  });
+  if (!pTabsEl.dataset.delegated) {
+    pTabsEl.dataset.delegated = '1';
+    pTabsEl.addEventListener('click', (ev) => {
+      const btn = ev.target.closest('[data-pharm-tab]');
+      if (!btn || !pTabsEl.contains(btn)) return;
+      pharmActiveTab = btn.dataset.pharmTab;
+      renderPharmacy();
+    });
+  }
 
   const content = document.getElementById('pharm-tab-content');
   const rows = byTab[pharmActiveTab];

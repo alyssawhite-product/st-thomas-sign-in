@@ -42,6 +42,18 @@ function statusBadge(status: QueueEntry["status"]) {
   }
 }
 
+// Friendly label for the visit_type column so "other" doesn't appear
+// in lowercase on a clinician's screen.
+function visitTypeLabel(visitType: string): string {
+  switch (visitType) {
+    case "general": return "General consultation";
+    case "follow-up": return "Follow-up";
+    case "pharmacy": return "Pharmacy";
+    case "other": return "Other";
+    default: return visitType;
+  }
+}
+
 // Human-readable sub-stage label for the row badge.
 function statusLabel(status: QueueEntry["status"]): string {
   switch (status) {
@@ -344,7 +356,7 @@ export function StaffQueue({ initialEntries, role, email }: Props) {
                       )}
                     </div>
                     <p className="mt-1 text-sm text-slate-500">
-                      {e.visit_type} ·{" "}
+                      {visitTypeLabel(e.visit_type)} ·{" "}
                       {(e as { id_type?: string }).id_type === "passport" ? "Passport" : "National ID"}:{" "}
                       {(e as { id_number?: string }).id_number} · Ref:{" "}
                       <span className="font-mono tracking-widest">{e.token}</span>

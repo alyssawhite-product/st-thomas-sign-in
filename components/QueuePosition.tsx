@@ -272,9 +272,29 @@ export function QueuePosition({ initialEntry, initialAhead }: Props) {
 
   const position = state.ahead + 1;
   const wait = state.ahead * AVG_MINUTES_PER_PATIENT;
+  // BB5: surface the most-recent transfer prominently so the patient
+  // gets clear feedback that their move went through. The entry's
+  // transferred_from is set by transferEntry on every move.
+  const transferredFromLabel = friendlyVisitTypeLabel(initialEntry.transferred_from);
+  const currentDestinationLabel = friendlyVisitTypeLabel(state.visitType);
 
   return (
     <>
+      {transferredFromLabel && (
+        <section className="rounded-xl border-2 border-emerald-300 bg-emerald-50 p-5 text-center">
+          <p className="text-sm font-semibold uppercase tracking-wider text-emerald-700">
+            You&apos;ve been moved
+          </p>
+          <p className="mt-1 text-lg font-semibold text-emerald-900">
+            From {transferredFromLabel} → {currentDestinationLabel}
+          </p>
+          {state.ticketNumber !== null && (
+            <p className="mt-1 text-sm text-emerald-800">
+              Your new ticket is <span className="font-mono font-bold">#{state.ticketNumber}</span>.
+            </p>
+          )}
+        </section>
+      )}
       <section className="rounded-xl bg-brand-light p-8 text-center">
         {state.ticketNumber !== null && (
           <>
@@ -303,9 +323,40 @@ export function QueuePosition({ initialEntry, initialAhead }: Props) {
       </section>
       <TransferForm token={initialEntry.token} currentVisitType={state.visitType} />
       <RequestHelpButton token={initialEntry.token} alreadyRequested={helpRequested} />
+      <NewCheckInLink />
       {kioskBanner}
     </>
   );
+}
+
+// BB6: visible "New check-in" link for shared kiosks. Always present
+// on the patient queue page below the request-help block. The kiosk
+// auto-timeout still applies separately when kiosk mode is enabled.
+function NewCheckInLink() {
+  return (
+    <div className="mt-6 text-center">
+      <a
+        href="/"
+        className="inline-block rounded-md border border-slate-300 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+      >
+        Check in another patient →
+      </a>
+    </div>
+  );
+}
+
+// Friendly label for the visit_type column. Stored values are
+// lowercase ("general", "follow-up", "pharmacy", "other"); we want
+// title case in patient-facing UI.
+function friendlyVisitTypeLabel(visitType: string | null | undefined): string | null {
+  if (!visitType) return null;
+  switch (visitType) {
+    case "general": return "General Clinic";
+    case "follow-up": return "Follow-up";
+    case "pharmacy": return "Pharmacy";
+    case "other": return "Other";
+    default: return visitType;
+  }
 }
 
 // Patient-facing emergency button. Confirm once (rules out fat-finger
