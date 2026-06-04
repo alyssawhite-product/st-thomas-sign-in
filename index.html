@@ -175,8 +175,10 @@
     </p>
 
     <div id="q-transfer-box" class="mt-6 rounded-xl border border-slate-200 p-5 hidden">
-      <p class="text-sm font-semibold text-slate-700">Need to visit another department?</p>
-      <p class="mt-1 text-sm text-slate-500">You'll be placed at the end of the new queue.</p>
+      <!-- FF2: heading + subhead are swapped at render time depending
+           on whether the patient is mid-visit or has been marked seen. -->
+      <p class="text-sm font-semibold text-slate-700" data-q-xfer-head>Need to visit another department?</p>
+      <p class="mt-1 text-sm text-slate-500" data-q-xfer-sub>You'll be placed at the end of the new queue.</p>
       <div class="mt-3 flex flex-wrap gap-2" id="q-transfer-buttons"></div>
       <div id="q-prescription-prompt" class="mt-4 rounded-md border border-slate-200 bg-slate-50 p-3 hidden">
         <p class="text-sm font-medium text-slate-700">Do you have a prescription?</p>
@@ -1467,11 +1469,22 @@ function renderQueue() {
   }
 
   // Patient-initiated transfer (restored after May 27 stakeholder meeting).
+  // FF2: still visible after status=seen so a clinic patient can be
+  // offered Pharmacy on the way out (and vice versa).
   if (transferBox) {
+    transferBox.classList.remove('hidden');
+    // FF2: swap the heading copy depending on whether the patient
+    // is mid-visit or finishing up.
+    const headEl = transferBox.querySelector('[data-q-xfer-head]');
+    const subEl = transferBox.querySelector('[data-q-xfer-sub]');
     if (entry.status === 'seen') {
-      transferBox.classList.add('hidden');
+      if (headEl) headEl.textContent = 'Would you like to visit another department before you go?';
+      if (subEl) subEl.textContent = "You'll get a new ticket and join that queue.";
     } else {
-      transferBox.classList.remove('hidden');
+      if (headEl) headEl.textContent = 'Need to visit another department?';
+      if (subEl) subEl.textContent = "You'll be placed at the end of the new queue.";
+    }
+    {
       // Offer the two departments the patient isn't already in.
       const currentStream = streamFor(entry.visit_type);
       const others = DEPARTMENTS.filter(d => d.stream !== currentStream);
@@ -1919,7 +1932,9 @@ function staffRow(e) {
   if (e.status === 'waiting') primary = `<button data-act="call" data-id="${e.id}" class="btn-primary">Call</button>`;
   else if (e.status === 'called') primary = `<button data-act="at-records" data-id="${e.id}" class="btn-primary">Mark at records</button>`;
   else if (e.status === 'at_records') primary = `<button data-act="with-nurse" data-id="${e.id}" class="btn-primary">Send to nurse</button>`;
-  else if (e.status === 'with_nurse') primary = `<button data-act="with-doctor" data-id="${e.id}" class="btn-primary">Send to doctor</button>`;
+  // FF1: after the nurse, the clinician can either send to doctor
+  // or close the visit. Two buttons so the decision is explicit.
+  else if (e.status === 'with_nurse') primary = `<button data-act="with-doctor" data-id="${e.id}" class="btn-primary">Send to doctor</button><button data-act="seen" data-id="${e.id}" class="rounded-lg border border-emerald-600 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50" title="Close the visit without sending to a doctor">Mark seen — no doctor needed</button>`;
   else if (e.status === 'with_doctor') primary = `<button data-act="seen" data-id="${e.id}" class="btn-primary">Mark seen</button>`;
   const moveOptions = DEPARTMENTS.filter(d => d.stream !== stream)
     .map(d => `<button data-act="move" data-id="${e.id}" data-vt="${d.defaultVisitType}" class="block w-full px-3 py-2 text-left text-sm hover:bg-slate-100">${d.label}</button>`)
