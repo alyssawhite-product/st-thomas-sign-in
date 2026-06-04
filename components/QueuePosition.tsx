@@ -59,6 +59,9 @@ interface State {
   ticketNumber: number | null;
   createdAt: string;
   helpRequestedAt: string | null;
+  // GG2: tracked so the chime keyer below sees a new value when a
+  // patient is called again after being transferred.
+  calledAt: string | null;
 }
 
 export function QueuePosition({ initialEntry, initialAhead }: Props) {
@@ -71,26 +74,31 @@ export function QueuePosition({ initialEntry, initialAhead }: Props) {
     createdAt: initialEntry.created_at,
     helpRequestedAt:
       (initialEntry as { help_requested_at?: string | null }).help_requested_at ?? null,
+    calledAt: (initialEntry as { called_at?: string | null }).called_at ?? null,
   });
   const [kioskSecondsLeft, setKioskSecondsLeft] = useState<number | null>(null);
-  // Track the last status we notified on so the chime + buzz fires once
-  // per transition, not every render.
-  const lastNotifiedStatusRef = useRef<QueueStatus | null>(
-    NOTIFY_STATUSES.includes(initialEntry.status) ? initialEntry.status : null,
+  // GG2: track the last notified key as status + called_at, not just
+  // status. A patient transferred between streams gets a brand-new
+  // called_at when called again, so the key differs and the chime
+  // fires (previously a clinic→pharmacy patient was silent on the
+  // second call because status="called" matched the prior key).
+  const initialCalledAt = (initialEntry as { called_at?: string | null }).called_at ?? "";
+  const lastNotifiedKeyRef = useRef<string | null>(
+    NOTIFY_STATUSES.includes(initialEntry.status)
+      ? `${initialEntry.status}:${initialCalledAt}`
+      : null,
   );
 
   useEffect(() => {
-    if (
-      NOTIFY_STATUSES.includes(state.status) &&
-      lastNotifiedStatusRef.current !== state.status
-    ) {
-      playPatientChime();
-      buzzPhone();
+    if (NOTIFY_STATUSES.includes(state.status)) {
+      const key = `${state.status}:${state.calledAt ?? ""}`;
+      if (lastNotifiedKeyRef.current !== key) {
+        playPatientChime();
+        buzzPhone();
+        lastNotifiedKeyRef.current = key;
+      }
     }
-    lastNotifiedStatusRef.current = NOTIFY_STATUSES.includes(state.status)
-      ? state.status
-      : lastNotifiedStatusRef.current;
-  }, [state.status]);
+  }, [state.status, state.calledAt]);
 
   const kioskTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -125,7 +133,7 @@ export function QueuePosition({ initialEntry, initialAhead }: Props) {
 
       const { data: meRow } = await supabase
         .from("queue_entries")
-        .select("status, created_at, visit_type, ticket_number, help_requested_at")
+        .select("status, created_at, visit_type, ticket_number, help_requested_at, called_at")
         .eq("id", initialEntry.id)
         .maybeSingle();
 
@@ -154,6 +162,7 @@ export function QueuePosition({ initialEntry, initialAhead }: Props) {
         ticketNumber: (meRow.ticket_number as number | null) ?? null,
         createdAt: meRow.created_at as string,
         helpRequestedAt: (meRow.help_requested_at as string | null) ?? null,
+        calledAt: (meRow.called_at as string | null) ?? null,
       });
     }
 

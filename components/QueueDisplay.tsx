@@ -174,16 +174,18 @@ export function QueueDisplay({ initialEntries }: Props) {
     new Set(topCalled(initialEntries).map((e) => e.id)),
   );
 
-  // Track which (id, status) pairs we've already announced so a patient
-  // gets one audio cue per sub-stage transition, not on every refresh.
+  // Track which (id, status, called_at) tuples we've already announced
+  // so a patient gets one audio cue per sub-stage transition AND a
+  // fresh announcement after a transfer (called_at changes on re-call).
   // Seeded from initial entries so we don't replay everything on mount.
+  const announceKey = (e: QueueEntry) => `${e.id}:${e.status}:${e.called_at ?? ""}`;
   const announcedKeysRef = useRef<Set<string>>(
     new Set(
       initialEntries
         .filter(
           (e) => DISPLAY_ANNOUNCEABLE_STATUSES.includes(e.status) && !e.priority,
         )
-        .map((e) => `${e.id}:${e.status}`),
+        .map((e) => announceKey(e)),
     ),
   );
 
@@ -236,7 +238,7 @@ export function QueueDisplay({ initialEntries }: Props) {
       const newAnnouncements = fresh.filter((e) => {
         if (!DISPLAY_ANNOUNCEABLE_STATUSES.includes(e.status)) return false;
         if (e.priority) return false;
-        return !announcedKeysRef.current.has(`${e.id}:${e.status}`);
+        return !announcedKeysRef.current.has(announceKey(e));
       });
 
       if (newAnnouncements.length > 0 && audioCtxRef.current) {
@@ -250,8 +252,8 @@ export function QueueDisplay({ initialEntries }: Props) {
       // Update both refs.
       visibleCalledIdsRef.current = new Set(visible.map((e) => e.id));
       for (const e of fresh) {
-        if (DISPLAY_ANNOUNCEABLE_STATUSES.includes(e.status)) {
-          announcedKeysRef.current.add(`${e.id}:${e.status}`);
+        if (DISPLAY_ANNOUNCEABLE_STATUSES.includes(e.status) && !e.priority) {
+          announcedKeysRef.current.add(announceKey(e));
         }
       }
       setEntries(fresh);

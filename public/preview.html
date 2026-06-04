@@ -559,6 +559,11 @@ function load() {
 function save() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   broadcast();
+  // GG1: BroadcastChannel doesn't deliver back to the originating tab
+  // and storage events only fire in OTHER tabs, so we need to redraw
+  // the current tab explicitly. Without this the patient who taps
+  // Move to Pharmacy sees no feedback until they refresh.
+  if (typeof render === 'function') render();
 }
 function seed() {
   // Pre-loaded sample data so every view immediately shows the new P0
@@ -1300,9 +1305,11 @@ function currentEntry() {
 function renderQueue() {
   const entry = currentEntry();
   // Patient-phone notification: chime + vibrate on transitions to a
-  // notify-worthy status. Fires once per (token, status) pair.
+  // notify-worthy status. GG2: key includes called_at so a patient
+  // who is transferred between streams (e.g. clinic → pharmacy) and
+  // then called again gets a fresh chime.
   if (entry && PATIENT_NOTIFY.includes(entry.status)) {
-    const key = `${entry.token}:${entry.status}`;
+    const key = `${entry.token}:${entry.status}:${entry.called_at || ''}`;
     if (!patientNotifiedKeys.has(key)) {
       patientNotifiedKeys.add(key);
       playPatientChime();
@@ -1729,10 +1736,16 @@ function renderDisplay() {
   // the Urgent button) and priority inserts are both retrieved in
   // person -- the public display should not announce them. Matches
   // the banner filter above.
+  // GG2: include called_at in the key so a patient who is transferred
+  // (e.g. clinic → pharmacy) and called again in the new stream gets
+  // a fresh audio announcement. Previously the (id, "called") pair
+  // would already be in the set from their first call, silencing the
+  // pharmacy callout.
+  const announceKey = (e) => `${e.id}:${e.status}:${e.called_at || ''}`;
   const newAnnouncements = state.entries.filter(e => {
     if (!DISPLAY_ANNOUNCEABLE.includes(e.status)) return false;
     if (e.priority) return false;
-    return !displayAnnouncedKeys.has(`${e.id}:${e.status}`);
+    return !displayAnnouncedKeys.has(announceKey(e));
   });
   if (newAnnouncements.length > 0 && displayAudioUnlocked) {
     playChime();
@@ -1741,7 +1754,7 @@ function renderDisplay() {
   }
   state.entries.forEach(e => {
     if (DISPLAY_ANNOUNCEABLE.includes(e.status) && !e.priority) {
-      displayAnnouncedKeys.add(`${e.id}:${e.status}`);
+      displayAnnouncedKeys.add(announceKey(e));
     }
   });
   displayVisibleCalledIds = new Set(called.map(e => e.id));
