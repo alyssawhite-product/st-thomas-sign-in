@@ -425,15 +425,30 @@ export function StaffQueue({ initialEntries, role, email }: Props) {
                         Send to nurse
                       </button>
                     )}
+                    {/* FF1: after nurse, the clinician decides whether
+                        the patient still needs to see the doctor or
+                        whether the visit is complete. Two buttons so
+                        the choice is explicit. */}
                     {e.status === "with_nurse" && (
-                      <button
-                        type="button"
-                        className="btn-primary"
-                        disabled={pending}
-                        onClick={() => submitAction(setWithDoctorAction, e.id)}
-                      >
-                        Send to doctor
-                      </button>
+                      <>
+                        <button
+                          type="button"
+                          className="btn-primary"
+                          disabled={pending}
+                          onClick={() => submitAction(setWithDoctorAction, e.id)}
+                        >
+                          Send to doctor
+                        </button>
+                        <button
+                          type="button"
+                          className="rounded-lg border border-emerald-600 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
+                          disabled={pending}
+                          onClick={() => submitAction(markSeenAction, e.id)}
+                          title="Close the visit without sending to a doctor"
+                        >
+                          Mark seen — no doctor needed
+                        </button>
+                      </>
                     )}
                     {e.status === "with_doctor" && (
                       <button

@@ -265,6 +265,16 @@ export function QueuePosition({ initialEntry, initialAhead }: Props) {
           <h2 className="text-2xl font-bold text-brand-dark">You have been seen</h2>
           <p className="mt-3 text-slate-700">Thank you for visiting St Thomas OPC.</p>
         </section>
+        {/* FF2: offer onward transfer to another department so a
+            patient can pick up a prescription (or go to clinic if
+            they came in for pharmacy). Same TransferForm we use
+            pre-call, just with the heading reworded. */}
+        <TransferForm
+          token={initialEntry.token}
+          currentVisitType={state.visitType}
+          headline="Would you like to visit another department before you go?"
+          subhead="You'll get a new ticket and join that queue."
+        />
         {kioskBanner}
       </>
     );
@@ -452,7 +462,17 @@ function RequestHelpButton({
   );
 }
 
-function TransferForm({ token, currentVisitType }: { token: string; currentVisitType: string }) {
+function TransferForm({
+  token,
+  currentVisitType,
+  headline = "Need to visit another department?",
+  subhead = "You'll be placed at the end of the new queue.",
+}: {
+  token: string;
+  currentVisitType: string;
+  headline?: string;
+  subhead?: string;
+}) {
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [picking, setPicking] = useState<string | null>(null);
@@ -502,10 +522,8 @@ function TransferForm({ token, currentVisitType }: { token: string; currentVisit
 
   return (
     <div className="mt-6 rounded-xl border border-slate-200 p-5">
-      <p className="text-sm font-semibold text-slate-700">Need to visit another department?</p>
-      <p className="mt-1 text-sm text-slate-500">
-        You&apos;ll be placed at the end of the new queue.
-      </p>
+      <p className="text-sm font-semibold text-slate-700">{headline}</p>
+      <p className="mt-1 text-sm text-slate-500">{subhead}</p>
       <div className="mt-3 flex flex-wrap gap-2">
         {others.map((dept) => (
           <button
