@@ -926,78 +926,84 @@ document.querySelectorAll('.nav-btn').forEach(b => {
 // ============================================================
 function renderSigninForm() {
   const wrap = document.getElementById('si-visit-types');
-  // HH2: each radio gets its own container with a placeholder slot for
-  // the related sub-question. We then physically move the existing
-  // sub-fieldsets (consultation, prescription, other-reason) into
-  // those slots so they render inline under the selected option.
-  wrap.innerHTML = TOP_LEVEL_VISITS.map((v, i) => `
-    <div data-visit-type-container="${v.value}">
-      <label class="flex cursor-pointer items-start gap-3 rounded-md border border-slate-300 px-4 py-3 text-base has-[:checked]:border-brand has-[:checked]:bg-brand-light">
-        <input ${i === 0 ? 'id="visit-type-general_clinic"' : ''} type="radio" name="si-visit-type" value="${v.value}" class="mt-0.5 h-5 w-5 shrink-0 accent-emerald-700" />
-        <span class="flex flex-col">
-          <span class="font-medium">${v.label}</span>
-          <span class="text-sm text-slate-500">${v.description}</span>
-        </span>
-      </label>
-      <div data-visit-type-sub="${v.value}"></div>
-    </div>
-  `).join('');
-  // Move sub-fieldsets into their respective slots, once. Use existing
-  // DOM nodes so the show/hide JS keeps working.
-  (function moveSubFieldsets() {
-    const consFs = document.getElementById('si-consultation-fs');
-    const consSlot = wrap.querySelector('[data-visit-type-sub="general_clinic"]');
-    if (consFs && consSlot && consFs.parentElement !== consSlot) {
-      consFs.classList.add('mt-2', 'ml-4', 'border-l-4', 'border-brand', 'pl-4');
-      consSlot.appendChild(consFs);
-    }
-    const rxFs = document.getElementById('si-prescription-fs');
-    const rxSlot = wrap.querySelector('[data-visit-type-sub="pharmacy"]');
-    if (rxFs && rxSlot && rxFs.parentElement !== rxSlot) {
-      rxFs.classList.add('mt-2', 'ml-4', 'border-l-4', 'border-brand', 'pl-4');
-      rxSlot.appendChild(rxFs);
-    }
-    const otherRow = document.getElementById('si-other-reason-row');
-    const otherSlot = wrap.querySelector('[data-visit-type-sub="other"]');
-    if (otherRow && otherSlot && otherRow.parentElement !== otherSlot) {
-      otherRow.classList.add('mt-2', 'ml-4', 'border-l-4', 'border-brand', 'pl-4');
-      otherSlot.appendChild(otherRow);
-    }
-  })();
-  wrap.querySelectorAll('input').forEach(r => {
-    r.addEventListener('change', () => {
-      updatePrescriptionVisibility();
-      updateConsultationVisibility();
-      updateOtherReasonVisibility();
-      siClearFieldError('visit-type');
-      siClearFieldError('consultation-type');
-      siClearFieldError('other-reason');
+  // Guard: the form scaffolding is one-time. GG1 made save() trigger
+  // render() on every mutation, which used to wipe the wrap and orphan
+  // the sub-fieldsets we moved into it (HH2). Re-attaching listeners
+  // on every render also stacked them. Only do this once per page.
+  if (!wrap.dataset.populated) {
+    wrap.dataset.populated = '1';
+    // HH2: each radio gets its own container with a placeholder slot
+    // for the related sub-question. We then physically move the
+    // existing sub-fieldsets (consultation, prescription, other-reason)
+    // into those slots so they render inline under the selected option.
+    wrap.innerHTML = TOP_LEVEL_VISITS.map((v, i) => `
+      <div data-visit-type-container="${v.value}">
+        <label class="flex cursor-pointer items-start gap-3 rounded-md border border-slate-300 px-4 py-3 text-base has-[:checked]:border-brand has-[:checked]:bg-brand-light">
+          <input ${i === 0 ? 'id="visit-type-general_clinic"' : ''} type="radio" name="si-visit-type" value="${v.value}" class="mt-0.5 h-5 w-5 shrink-0 accent-emerald-700" />
+          <span class="flex flex-col">
+            <span class="font-medium">${v.label}</span>
+            <span class="text-sm text-slate-500">${v.description}</span>
+          </span>
+        </label>
+        <div data-visit-type-sub="${v.value}"></div>
+      </div>
+    `).join('');
+    // Move sub-fieldsets into their respective slots, once.
+    (function moveSubFieldsets() {
+      const consFs = document.getElementById('si-consultation-fs');
+      const consSlot = wrap.querySelector('[data-visit-type-sub="general_clinic"]');
+      if (consFs && consSlot && consFs.parentElement !== consSlot) {
+        consFs.classList.add('mt-2', 'ml-4', 'border-l-4', 'border-brand', 'pl-4');
+        consSlot.appendChild(consFs);
+      }
+      const rxFs = document.getElementById('si-prescription-fs');
+      const rxSlot = wrap.querySelector('[data-visit-type-sub="pharmacy"]');
+      if (rxFs && rxSlot && rxFs.parentElement !== rxSlot) {
+        rxFs.classList.add('mt-2', 'ml-4', 'border-l-4', 'border-brand', 'pl-4');
+        rxSlot.appendChild(rxFs);
+      }
+      const otherRow = document.getElementById('si-other-reason-row');
+      const otherSlot = wrap.querySelector('[data-visit-type-sub="other"]');
+      if (otherRow && otherSlot && otherRow.parentElement !== otherSlot) {
+        otherRow.classList.add('mt-2', 'ml-4', 'border-l-4', 'border-brand', 'pl-4');
+        otherSlot.appendChild(otherRow);
+      }
+    })();
+    wrap.querySelectorAll('input').forEach(r => {
+      r.addEventListener('change', () => {
+        updatePrescriptionVisibility();
+        updateConsultationVisibility();
+        updateOtherReasonVisibility();
+        siClearFieldError('visit-type');
+        siClearFieldError('consultation-type');
+        siClearFieldError('other-reason');
+      });
     });
-  });
-  // EE5: typing in the Other reason textarea also clears its error.
-  document.getElementById('si-other-reason').addEventListener('input', () => siClearFieldError('other-reason'));
+    // EE5: typing in the Other reason textarea also clears its error.
+    document.getElementById('si-other-reason').addEventListener('input', () => siClearFieldError('other-reason'));
 
-  const consWrap = document.getElementById('si-consultation-opts');
-  consWrap.innerHTML = CONSULTATION_TYPES.map((opt, i) => `
-    <label class="flex cursor-pointer items-start gap-3 rounded-md border border-slate-300 px-4 py-3 text-base has-[:checked]:border-brand has-[:checked]:bg-brand-light">
-      <input ${i === 0 ? 'id="consultation-type-general"' : ''} type="radio" name="si-consultation-type" value="${opt.value}" class="mt-0.5 h-5 w-5 shrink-0 accent-emerald-700" />
-      <span class="flex flex-col"><span class="font-medium">${opt.label}</span><span class="text-sm text-slate-500">${opt.description}</span></span>
-    </label>
-  `).join('');
-  consWrap.querySelectorAll('input').forEach(r => {
-    r.addEventListener('change', () => siClearFieldError('consultation-type'));
-  });
+    const consWrap = document.getElementById('si-consultation-opts');
+    consWrap.innerHTML = CONSULTATION_TYPES.map((opt, i) => `
+      <label class="flex cursor-pointer items-start gap-3 rounded-md border border-slate-300 px-4 py-3 text-base has-[:checked]:border-brand has-[:checked]:bg-brand-light">
+        <input ${i === 0 ? 'id="consultation-type-general"' : ''} type="radio" name="si-consultation-type" value="${opt.value}" class="mt-0.5 h-5 w-5 shrink-0 accent-emerald-700" />
+        <span class="flex flex-col"><span class="font-medium">${opt.label}</span><span class="text-sm text-slate-500">${opt.description}</span></span>
+      </label>
+    `).join('');
+    consWrap.querySelectorAll('input').forEach(r => {
+      r.addEventListener('change', () => siClearFieldError('consultation-type'));
+    });
 
-  const opts = document.getElementById('si-prescription-opts');
-  opts.innerHTML = PRESCRIPTION_OPTIONS.map((o, i) => `
-    <label class="flex cursor-pointer items-start gap-3 rounded-md border border-slate-300 px-4 py-3 text-base has-[:checked]:border-brand has-[:checked]:bg-brand-light">
-      <input ${i === 0 ? 'id="has-prescription-yes"' : ''} type="radio" name="si-rx" value="${o.value}" class="mt-0.5 h-5 w-5 shrink-0 accent-emerald-700" />
-      <span class="flex flex-col"><span class="font-medium">${o.label}</span><span class="text-sm text-slate-500">${o.description}</span></span>
-    </label>
-  `).join('');
-  opts.querySelectorAll('input').forEach(r => {
-    r.addEventListener('change', () => siClearFieldError('has-prescription'));
-  });
+    const opts = document.getElementById('si-prescription-opts');
+    opts.innerHTML = PRESCRIPTION_OPTIONS.map((o, i) => `
+      <label class="flex cursor-pointer items-start gap-3 rounded-md border border-slate-300 px-4 py-3 text-base has-[:checked]:border-brand has-[:checked]:bg-brand-light">
+        <input ${i === 0 ? 'id="has-prescription-yes"' : ''} type="radio" name="si-rx" value="${o.value}" class="mt-0.5 h-5 w-5 shrink-0 accent-emerald-700" />
+        <span class="flex flex-col"><span class="font-medium">${o.label}</span><span class="text-sm text-slate-500">${o.description}</span></span>
+      </label>
+    `).join('');
+    opts.querySelectorAll('input').forEach(r => {
+      r.addEventListener('change', () => siClearFieldError('has-prescription'));
+    });
+  }
 
   // Populate the country dropdown once.
   const countrySel = document.getElementById('si-country');
@@ -1023,33 +1029,40 @@ function renderSigninForm() {
     otherInput.addEventListener('input', () => siClearFieldError('country'));
   }
 
-  // Nationality radios show/hide country + ID-type + ID number, and
-  // tweak the ID number label.
-  document.querySelectorAll('input[name="si-nationality"]').forEach(r => {
-    r.addEventListener('change', () => {
-      const v = document.querySelector('input[name="si-nationality"]:checked')?.value;
-      const isNonNational = v === 'non_national';
-      document.getElementById('si-country-row').classList.toggle('hidden', !isNonNational);
-      document.getElementById('si-id-type-row').classList.toggle('hidden', !isNonNational);
-      // EE8: ID number only revealed once we know which document to ask for.
-      document.getElementById('si-id-number-row').classList.toggle('hidden', !v);
-      // EE9: Nationals → National ID. Non-Nationals → Passport (default).
-      if (!isNonNational) {
-        const natRadio = document.querySelector('input[name="si-id-type"][value="national_id"]');
-        if (natRadio) natRadio.checked = true;
-      } else {
-        const passRadio = document.querySelector('input[name="si-id-type"][value="passport"]');
-        if (passRadio) passRadio.checked = true;
-      }
-      siUpdateIdLabel();
-      siClearFieldError('nationality');
+  // Gate the nationality + ID-type listeners so they aren't re-attached
+  // on every render() (would stack and re-fire multiple times). Same
+  // guard idiom as wrap.dataset.populated above.
+  const form = document.getElementById('signin-form');
+  if (form && !form.dataset.nationalityWired) {
+    form.dataset.nationalityWired = '1';
+    // Nationality radios show/hide country + ID-type + ID number, and
+    // tweak the ID number label.
+    document.querySelectorAll('input[name="si-nationality"]').forEach(r => {
+      r.addEventListener('change', () => {
+        const v = document.querySelector('input[name="si-nationality"]:checked')?.value;
+        const isNonNational = v === 'non_national';
+        document.getElementById('si-country-row').classList.toggle('hidden', !isNonNational);
+        document.getElementById('si-id-type-row').classList.toggle('hidden', !isNonNational);
+        // EE8: ID number only revealed once we know which document to ask for.
+        document.getElementById('si-id-number-row').classList.toggle('hidden', !v);
+        // EE9: Nationals → National ID. Non-Nationals → Passport (default).
+        if (!isNonNational) {
+          const natRadio = document.querySelector('input[name="si-id-type"][value="national_id"]');
+          if (natRadio) natRadio.checked = true;
+        } else {
+          const passRadio = document.querySelector('input[name="si-id-type"][value="passport"]');
+          if (passRadio) passRadio.checked = true;
+        }
+        siUpdateIdLabel();
+        siClearFieldError('nationality');
+      });
     });
-  });
 
-  // ID-type radios drive the label + placeholder of the ID input.
-  document.querySelectorAll('input[name="si-id-type"]').forEach(r => {
-    r.addEventListener('change', siUpdateIdLabel);
-  });
+    // ID-type radios drive the label + placeholder of the ID input.
+    document.querySelectorAll('input[name="si-id-type"]').forEach(r => {
+      r.addEventListener('change', siUpdateIdLabel);
+    });
+  }
   siUpdateIdLabel();
 }
 
