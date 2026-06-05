@@ -33,7 +33,7 @@
     .display-bg { background:#020617; color:#fff; min-height:100vh; }
   </style>
 </head>
-<body class="bg-slate-50 text-slate-900 pb-14">
+<body class="bg-slate-50 text-slate-900 pb-20">
 
 <!-- ============================== SIGN-IN ============================== -->
 <section data-view="signin" class="active">
@@ -41,7 +41,14 @@
     <header class="mb-8">
       <p class="text-sm font-semibold uppercase tracking-wide text-brand">St Thomas Outpatient Clinic</p>
       <h1 class="mt-2 text-3xl font-bold leading-tight">Check in for your visit</h1>
-      <p class="mt-3 text-slate-600">Enter your name and the type of your visit to join the queue. You can find your place again at any time using your name, ID number, or reference code.</p>
+      <p class="mt-3 text-slate-600">Enter your name and the type of your visit to join the queue. You can find your place again at any time using your ID number or reference code.</p>
+      <!-- KK1: lookup link surfaced at the top so a returning patient
+           doesn't have to scroll past the whole form to see it. The
+           inline duplicate at the bottom of the form is kept too. -->
+      <p class="mt-4 rounded-md bg-slate-100 px-3 py-2 text-sm text-slate-700">
+        Already checked in today?
+        <button type="button" data-go="lookup" class="nav-btn font-semibold text-brand hover:underline">Find my place in queue →</button>
+      </p>
     </header>
 
     <form id="signin-form" class="space-y-6" novalidate>
@@ -174,10 +181,22 @@
       <span class="font-semibold text-slate-700">Visit type:</span> <span id="q-visit-type">—</span>
     </p>
 
+    <!-- JJ1: "What happens next" now comes BEFORE Help so the patient
+         reads the calming instructions ("Take a seat") before they're
+         shown the big red emergency button. -->
+    <section class="mt-8 rounded-lg border border-slate-200 bg-slate-50 p-4">
+      <h2 class="text-sm font-bold text-slate-800">What happens next</h2>
+      <ul class="mt-2 space-y-1 text-sm text-slate-600">
+        <li>Take a seat in the waiting area.</li>
+        <li>We&rsquo;ll call your name over the speaker. For privacy, the screen shows only your initials and your ticket number.</li>
+        <li>If you leave this page, use your reference code at <a id="q-lookup-url" class="font-semibold text-brand hover:underline" href="#">the lookup page</a> to find your place again.</li>
+        <li>If you have any questions, speak to a member of staff at the front desk.</li>
+      </ul>
+    </section>
+
     <!-- HH3: Request Help comes BEFORE the Move-to-another-department
          block so the urgent action is closer to the patient's eye and
-         the two big buttons aren't visually adjacent (Doreen-test
-         showed misclick risk when they were stacked together). -->
+         the two big buttons aren't visually adjacent. -->
     <div id="q-help-box" class="mt-6 hidden">
       <div id="q-help-prompt" class="rounded-xl border-2 border-red-200 bg-white p-5 text-center">
         <p class="text-sm font-semibold text-slate-700">Feeling worse while you wait?</p>
@@ -206,20 +225,6 @@
         </div>
       </div>
     </div>
-
-    <!-- EE1 + EE11: single block of "what happens next" copy.
-         Replaces the contradictory "called by name" / "display shows
-         initials only" combo and drops the dev URL — the reference
-         code card above already gives the patient their recovery key. -->
-    <section class="mt-8 rounded-lg border border-slate-200 bg-slate-50 p-4">
-      <h2 class="text-sm font-bold text-slate-800">What happens next</h2>
-      <ul class="mt-2 space-y-1 text-sm text-slate-600">
-        <li>Take a seat in the waiting area.</li>
-        <li>We&rsquo;ll call your name over the speaker. For privacy, the screen shows only your initials and your ticket number.</li>
-        <li>If you leave this page, use your reference code at <a id="q-lookup-url" class="font-semibold text-brand hover:underline" href="#">the lookup page</a> to find your place again.</li>
-        <li>If you have any questions, speak to a member of staff at the front desk.</li>
-      </ul>
-    </section>
 
     <!-- BB6 + EE7: explicit "New check-in" button for shared kiosks.
          Confirms before navigating away so personal-phone users don't
@@ -381,11 +386,11 @@
     <header class="mb-8">
       <p class="text-sm font-semibold uppercase tracking-wide text-brand">St Thomas Outpatient Clinic</p>
       <h1 class="mt-2 text-3xl font-bold leading-tight">Find my place in queue</h1>
-      <p class="mt-3 text-slate-600">Enter your name, ID number, or reference code and we'll show you your place in the queue.</p>
+      <p class="mt-3 text-slate-600">Enter your ID number or reference code and we&rsquo;ll show you your place in the queue.</p>
     </header>
     <form id="lookup-form" class="space-y-5" novalidate>
       <div>
-        <label class="field-label" for="lk-id-number">Your name, ID number, or reference code</label>
+        <label class="field-label" for="lk-id-number">Your ID number or reference code</label>
         <input id="lk-id-number" maxlength="120" class="field-input" placeholder="e.g. Karen Williams, 1234567890, or X6AU" />
         <p id="lk-error" role="alert" class="mt-1 hidden text-sm font-medium text-red-700"></p>
       </div>
@@ -436,15 +441,19 @@
      viewing this on their phone don't mistake "Clinic" / "Pharmacy"
      for places to tap. Production builds remove this section
      entirely. -->
+<!-- JJ3: nav stays a single row at all widths (overflow-x-auto). On a
+     375px phone the buttons no longer wrap to a second row, which used
+     to take the bar to ~97px tall and cover the last 41px of content
+     (e.g. action buttons on whichever row the page ended on). -->
 <nav class="fixed bottom-0 left-0 right-0 z-50 border-t-2 border-amber-300 bg-amber-50/95 backdrop-blur-sm">
-  <div class="mx-auto flex max-w-3xl flex-wrap items-center justify-between gap-2 px-4 py-1.5">
-    <span class="text-[10px] font-bold uppercase tracking-widest text-amber-800">⚠ Demo controls — switch view:</span>
-    <div class="flex flex-wrap gap-1">
-      <button data-go="signin" class="nav-btn rounded-md px-3 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-100">Patient check-in</button>
-      <button data-go="display" class="nav-btn rounded-md px-3 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-100">Public display</button>
-      <button data-go="stafflogin" class="nav-btn rounded-md px-3 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-100">Clinic dashboard</button>
-      <button data-go="pharmacy" class="nav-btn rounded-md px-3 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-100">Pharmacy dashboard</button>
-      <button data-go="qr" class="nav-btn rounded-md px-3 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-100">QR poster</button>
+  <div class="mx-auto flex max-w-3xl items-center gap-2 overflow-x-auto whitespace-nowrap px-4 py-1.5">
+    <span class="shrink-0 text-[10px] font-bold uppercase tracking-widest text-amber-800">⚠ Demo:</span>
+    <div class="flex shrink-0 gap-1">
+      <button data-go="signin" class="nav-btn rounded-md px-3 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-100">Check-in</button>
+      <button data-go="display" class="nav-btn rounded-md px-3 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-100">Display</button>
+      <button data-go="stafflogin" class="nav-btn rounded-md px-3 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-100">Clinic</button>
+      <button data-go="pharmacy" class="nav-btn rounded-md px-3 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-100">Pharmacy</button>
+      <button data-go="qr" class="nav-btn rounded-md px-3 py-1.5 text-xs font-medium text-amber-900 hover:bg-amber-100">QR</button>
     </div>
   </div>
 </nav>
@@ -1248,6 +1257,15 @@ document.getElementById('signin-form').addEventListener('submit', (e) => {
   // field is hidden until then).
   if (nationality && !idNumber) {
     siShowFieldError('id-number', 'Enter your ID number.');
+    hasError = true;
+  }
+  // KK2: soft Barbados National ID format check. 10 digits is the
+  // observed pattern (DDMMYY + 4-digit serial); strict rules pending
+  // MOH confirmation. Only applies to Nationals (who are forced to
+  // Barbados National ID); Non-Nationals using their own country's
+  // National ID can have any format.
+  if (nationality === 'national' && idNumber && !/^\d{10}$/.test(idNumber)) {
+    siShowFieldError('id-number', 'Your Barbados National ID should be 10 digits, no spaces.');
     hasError = true;
   }
   if (!topLevelVisit) {
@@ -2280,26 +2298,26 @@ document.getElementById('lookup-form').addEventListener('submit', (e) => {
   input.classList.remove('border-red-500');
 
   if (!trimmed) {
-    err.textContent = 'Enter your name, ID number, or reference code.';
+    err.textContent = 'Enter your ID number or reference code.';
     err.classList.remove('hidden');
     input.classList.add('border-red-500');
     return;
   }
 
-  // Match against name (case-insensitive), id_number (exact),
-  // or token / reference (case-insensitive).
+  // JJ2: match against id_number (exact) or token (case-insensitive)
+  // only. Name lookup was dropped because common surnames mean a name
+  // hit could route the wrong person to someone else's queue page.
   const lower = trimmed.toLowerCase();
   const entry = state.entries
     .filter(en => en.status !== 'seen')
     .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
     .find(en =>
-      en.name.toLowerCase() === lower ||
       en.id_number === trimmed ||
       en.token.toLowerCase() === lower
     );
 
   if (!entry) {
-    err.textContent = 'We could not find an active queue entry matching that name, ID number, or reference code. Check what you entered and try again, or speak to a member of staff.';
+    err.textContent = 'We could not find an active queue entry matching that ID number or reference code. Check what you entered and try again, or speak to a member of staff.';
     err.classList.remove('hidden');
     input.classList.add('border-red-500');
     return;
