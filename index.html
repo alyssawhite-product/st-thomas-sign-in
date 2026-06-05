@@ -1478,13 +1478,17 @@ function renderQueue() {
         ${bodyLine ? `<h2 class="mt-3 text-2xl font-bold text-amber-900">${bodyLine}</h2>` : ''}
       </section>`;
   } else if (entry.status === 'seen') {
-    // LL2: "Seen" = done with THIS department; patient may visit
-    // another (FF2 offers Pharmacy in the transfer box below).
-    const finishedDept = friendlyVisitType(entry.visit_type) || 'this department';
+    // LL2 + MM1: "Seen" = done with THIS department. Warm short close;
+    // FF2 transfer box below still offers the next department.
+    const finishedDept = (
+      entry.visit_type === 'pharmacy' ? 'the Pharmacy'
+      : (entry.visit_type === 'general' || entry.visit_type === 'follow-up') ? 'the General Clinic'
+      : 'the clinic'
+    );
     box.innerHTML = `
       <section class="rounded-xl bg-brand-light p-8 text-center">
         <h2 class="text-2xl font-bold text-brand-dark">You&rsquo;ve finished at ${escapeHtml(finishedDept)}</h2>
-        <p class="mt-3 text-slate-700">Thank you. If you have nothing else, you&rsquo;re free to leave.</p>
+        <p class="mt-3 text-slate-700">Thank you.</p>
       </section>`;
   } else {
     const ahead = state.entries.filter(e =>
