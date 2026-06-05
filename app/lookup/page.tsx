@@ -16,7 +16,7 @@ export default function LookupPage({ searchParams }: Props) {
         </p>
         <h1 className="mt-2 text-3xl font-bold leading-tight">Find my place in queue</h1>
         <p className="mt-3 text-slate-600">
-          Enter your name, ID number, or reference code and we&apos;ll show you your
+          Enter your ID number or reference code and we&apos;ll show you your
           place in the queue.
         </p>
       </header>

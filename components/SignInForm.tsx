@@ -111,6 +111,15 @@ function validate({
   if (nationality && !idNumber.trim()) {
     errors.id_number = "Enter your ID number.";
   }
+  // KK2: Barbados National ID format check. Nationals are always
+  // identified by their Barbados National ID, which is 10 digits
+  // (DDMMYY + 4-digit serial). MOH-confirmed strict rules (check
+  // digit, plausible date-of-birth) are TBC; this is the soft check.
+  // Non-Nationals using their own country's national ID skip this --
+  // the format varies by country.
+  if (nationality === "national" && idNumber.trim() && !/^\d{10}$/.test(idNumber.trim())) {
+    errors.id_number = "Your Barbados National ID should be 10 digits, no spaces.";
+  }
   if (!topLevelVisit) {
     errors.visit_type = "Choose a type of visit.";
   }
@@ -283,6 +292,7 @@ export function SignInForm({ kiosk }: Props) {
           NATIONALITY_REQUIRED: { field: "nationality", msg: "Tell us whether you are a national or non-national." },
           COUNTRY_REQUIRED: { field: "country_of_origin", msg: "Choose your country of origin." },
           ID_NUMBER_REQUIRED: { field: "id_number", msg: "Enter your ID number." },
+          ID_NUMBER_INVALID: { field: "id_number", msg: "Your Barbados National ID should be 10 digits, no spaces." },
           ID_TYPE_INVALID: { field: "id_number", msg: "Choose a valid ID type." },
           VISIT_TYPE_INVALID: { field: "visit_type", msg: "Choose a type of visit." },
           CONSULTATION_TYPE_REQUIRED: { field: "consultation_type", msg: "Choose new consultation or follow-up." },

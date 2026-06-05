@@ -50,6 +50,11 @@ function buzzPhone() {
 interface Props {
   initialEntry: QueueEntry;
   initialAhead: number;
+  // JJ1: optional copy block ("What happens next") rendered between
+  // the reference code card and the Request Help block on the
+  // waiting branch. Lifted into the parent so it can use server-side
+  // headers() for the lookup URL.
+  whatHappensNext?: React.ReactNode;
 }
 
 interface State {
@@ -64,7 +69,7 @@ interface State {
   calledAt: string | null;
 }
 
-export function QueuePosition({ initialEntry, initialAhead }: Props) {
+export function QueuePosition({ initialEntry, initialAhead, whatHappensNext }: Props) {
   const router = useRouter();
   const [state, setState] = useState<State>({
     status: initialEntry.status,
@@ -355,10 +360,12 @@ export function QueuePosition({ initialEntry, initialAhead }: Props) {
           Write this down. You can use it to find your place again from any phone.
         </p>
       </section>
+      {/* JJ1: instructions come first so the calming "Take a seat"
+          copy lands before the red Help button. */}
+      {whatHappensNext}
       {/* HH3: Request Help comes BEFORE Move to another department so
-          the more urgent action is closer to the patient's eye, and so
-          the two big buttons aren't visually adjacent (Doreen test
-          showed misclick risk when they were stacked together). */}
+          the urgent action is more visible than the (rare) transfer
+          option, and so the two big buttons aren't visually adjacent. */}
       <RequestHelpButton token={initialEntry.token} alreadyRequested={helpRequested} />
       <TransferForm token={initialEntry.token} currentVisitType={state.visitType} />
       <NewCheckInLink />

@@ -22,7 +22,10 @@ export function LookupForm({ initialQuery = "" }: Props) {
     setError(null);
     const trimmed = query.trim();
     if (!trimmed) {
-      setError("Enter your name, ID number, or reference code.");
+      // JJ2: lookup is by ID number OR reference code only — name is
+      // off the table because common surnames mean a name match could
+      // route the wrong person to someone else's queue page.
+      setError("Enter your ID number or reference code.");
       return;
     }
     const fd = new FormData();
@@ -42,10 +45,10 @@ export function LookupForm({ initialQuery = "" }: Props) {
         }
         const message = err instanceof Error ? err.message : "Something went wrong";
         if (message === "LOOKUP_EMPTY") {
-          setError("Enter your name, ID number, or reference code.");
+          setError("Enter your ID number or reference code.");
         } else if (message === "LOOKUP_NOT_FOUND") {
           setError(
-            "We could not find an active queue entry matching that name, ID number, or reference code. Check what you entered and try again, or speak to a member of staff.",
+            "We could not find an active queue entry matching that ID number or reference code. Check what you entered and try again, or speak to a member of staff.",
           );
         } else {
           setError("Sorry, something went wrong. Please try again.");
@@ -58,7 +61,7 @@ export function LookupForm({ initialQuery = "" }: Props) {
     <form action={onSubmit} noValidate className="space-y-5">
       <div>
         <label htmlFor="q" className="field-label">
-          Your name, ID number, or reference code
+          Your ID number or reference code
         </label>
         <input
           id="q"
@@ -66,7 +69,7 @@ export function LookupForm({ initialQuery = "" }: Props) {
           type="text"
           maxLength={120}
           className={`field-input ${error ? "border-red-500" : ""}`}
-          placeholder="e.g. Karen Williams, 1234567890, or X6AU"
+          placeholder="e.g. 1234567890 or X6AU"
           value={query}
           onChange={(e) => {
             setQuery(e.target.value);

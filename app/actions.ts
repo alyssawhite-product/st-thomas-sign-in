@@ -79,6 +79,12 @@ export async function signInAction(formData: FormData): Promise<void> {
   }
 
   if (!idNumber) throw new Error("ID_NUMBER_REQUIRED");
+  // KK2: server-enforced Barbados National ID format check. Soft rule
+  // (10 digits, no spaces) pending MOH confirmation of the strict
+  // spec. Only applies to Nationals.
+  if (nationality === "national" && !/^\d{10}$/.test(idNumber)) {
+    throw new Error("ID_NUMBER_INVALID");
+  }
   if (!VISIT_TYPE_VALUES.includes(visitType as (typeof VISIT_TYPE_VALUES)[number])) {
     throw new Error("VISIT_TYPE_INVALID");
   }

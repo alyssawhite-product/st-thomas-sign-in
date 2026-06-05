@@ -87,9 +87,10 @@ export async function findEntryByIdNumber(idNumber: string): Promise<QueueEntry 
   return (data as QueueEntry | null) ?? null;
 }
 
-// Patient-side lookup. Matches today's active entries on full name
-// (case-insensitive), ID number (exact), or reference token
-// (case-insensitive). First match wins, freshest entry first.
+// Patient-side lookup. Matches today's active entries on ID number
+// (exact) or reference token (case-insensitive). Name lookup was
+// dropped on purpose: clinic visits share common surnames and a name
+// hit could route the wrong person to someone else's queue page.
 export async function findEntryByQuery(query: string): Promise<QueueEntry | null> {
   const trimmed = query.trim();
   if (!trimmed) return null;
@@ -108,7 +109,6 @@ export async function findEntryByQuery(query: string): Promise<QueueEntry | null
   return (
     rows.find(
       (r) =>
-        r.name.toLowerCase() === lower ||
         r.id_number === trimmed ||
         r.token.toLowerCase() === lower,
     ) ?? null

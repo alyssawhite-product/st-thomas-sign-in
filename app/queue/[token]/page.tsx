@@ -54,33 +54,37 @@ export default async function PersonalQueuePage({ params }: Props) {
         </p>
       </header>
 
-      <QueuePosition initialEntry={view.entry} initialAhead={view.ahead} />
-
-      {/* EE1 + EE11: single block of "what happens next" copy.
-          Replaces the contradictory "called by name" / "display shows
-          initials only" combo and drops the dev URL — patients use
-          the reference code from the card above to find their place
-          again from the lookup link in the header. */}
-      <section className="mt-8 rounded-lg border border-slate-200 bg-slate-50 p-4">
-        <h2 className="text-sm font-bold text-slate-800">What happens next</h2>
-        <ul className="mt-2 space-y-1 text-sm text-slate-600">
-          <li>Take a seat in the waiting area.</li>
-          <li>
-            We&apos;ll call your name over the speaker. For privacy, the screen shows only
-            your initials and your ticket number.
-          </li>
-          <li>
-            If you leave this page, you can find your place again at{" "}
-            <a href={lookupUrl} className="font-semibold text-brand hover:underline">
-              {lookupUrl.replace(/^https?:\/\//, "")}
-            </a>{" "}
-            using your reference code above.
-          </li>
-          <li>
-            If you have any questions, speak to a member of staff at the front desk.
-          </li>
-        </ul>
-      </section>
+      {/* JJ1: "What happens next" passes through QueuePosition so it
+          renders BETWEEN the reference-code card and the Request Help
+          card on the waiting branch. Reading the calming instructions
+          first ("Take a seat") feels better than seeing the red
+          emergency button right away. */}
+      <QueuePosition
+        initialEntry={view.entry}
+        initialAhead={view.ahead}
+        whatHappensNext={
+          <section className="mt-6 rounded-lg border border-slate-200 bg-slate-50 p-4">
+            <h2 className="text-sm font-bold text-slate-800">What happens next</h2>
+            <ul className="mt-2 space-y-1 text-sm text-slate-600">
+              <li>Take a seat in the waiting area.</li>
+              <li>
+                We&apos;ll call your name over the speaker. For privacy, the screen shows only
+                your initials and your ticket number.
+              </li>
+              <li>
+                If you leave this page, you can find your place again at{" "}
+                <a href={lookupUrl} className="font-semibold text-brand hover:underline">
+                  {lookupUrl.replace(/^https?:\/\//, "")}
+                </a>{" "}
+                using your reference code above.
+              </li>
+              <li>
+                If you have any questions, speak to a member of staff at the front desk.
+              </li>
+            </ul>
+          </section>
+        }
+      />
 
       <PoweredBy className="mt-12" />
     </main>
