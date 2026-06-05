@@ -1478,10 +1478,13 @@ function renderQueue() {
         ${bodyLine ? `<h2 class="mt-3 text-2xl font-bold text-amber-900">${bodyLine}</h2>` : ''}
       </section>`;
   } else if (entry.status === 'seen') {
+    // LL2: "Seen" = done with THIS department; patient may visit
+    // another (FF2 offers Pharmacy in the transfer box below).
+    const finishedDept = friendlyVisitType(entry.visit_type) || 'this department';
     box.innerHTML = `
       <section class="rounded-xl bg-brand-light p-8 text-center">
-        <h2 class="text-2xl font-bold text-brand-dark">You have been seen</h2>
-        <p class="mt-3 text-slate-700">Thank you for visiting St Thomas OPC.</p>
+        <h2 class="text-2xl font-bold text-brand-dark">You&rsquo;ve finished at ${escapeHtml(finishedDept)}</h2>
+        <p class="mt-3 text-slate-700">Thank you. If you have nothing else, you&rsquo;re free to leave.</p>
       </section>`;
   } else {
     const ahead = state.entries.filter(e =>
@@ -1675,7 +1678,7 @@ function renderHelpAlertBanner(requesters) {
         <div class="flex-1">
           <p class="text-sm font-bold uppercase tracking-wider">Help requested</p>
           <p class="mt-1 text-lg font-semibold">${line}</p>
-          <p class="mt-1 text-sm text-red-100">Check on the patient, then Send to doctor or Mark seen to clear this alert.</p>
+          <p class="mt-1 text-sm text-red-100">Check on the patient, then Send to doctor or Finish at clinic to clear this alert.</p>
         </div>
       </div>
     </div>`;
@@ -2014,12 +2017,17 @@ function staffRow(e) {
   // in-progress stage.
   let primary = '';
   if (e.status === 'waiting') primary = `<button data-act="call" data-id="${e.id}" class="btn-primary">Call</button>`;
-  else if (e.status === 'called') primary = `<button data-act="at-records" data-id="${e.id}" class="btn-primary">Mark at records</button>`;
+  // LL1: friendlier labels. "Patient at records" reads as the records
+  // desk acknowledging arrival; "Send to nurse" is the records desk
+  // handing them off.
+  else if (e.status === 'called') primary = `<button data-act="at-records" data-id="${e.id}" class="btn-primary">Patient at records</button>`;
   else if (e.status === 'at_records') primary = `<button data-act="with-nurse" data-id="${e.id}" class="btn-primary">Send to nurse</button>`;
   // FF1: after the nurse, the clinician can either send to doctor
   // or close the visit. Two buttons so the decision is explicit.
-  else if (e.status === 'with_nurse') primary = `<button data-act="with-doctor" data-id="${e.id}" class="btn-primary">Send to doctor</button><button data-act="seen" data-id="${e.id}" class="rounded-lg border border-emerald-600 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50" title="Close the visit without sending to a doctor">Mark seen — no doctor needed</button>`;
-  else if (e.status === 'with_doctor') primary = `<button data-act="seen" data-id="${e.id}" class="btn-primary">Mark seen</button>`;
+  // LL1: "Finish at clinic" makes the new "done with this department"
+  // semantic explicit. The secondary path is the no-doctor variant.
+  else if (e.status === 'with_nurse') primary = `<button data-act="with-doctor" data-id="${e.id}" class="btn-primary">Send to doctor</button><button data-act="seen" data-id="${e.id}" class="rounded-lg border border-emerald-600 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50" title="Close the General Clinic visit without sending to a doctor">Finish at clinic (no doctor)</button>`;
+  else if (e.status === 'with_doctor') primary = `<button data-act="seen" data-id="${e.id}" class="btn-primary">Finish at clinic</button>`;
   const moveOptions = DEPARTMENTS.filter(d => d.stream !== stream)
     .map(d => `<button data-act="move" data-id="${e.id}" data-vt="${d.defaultVisitType}" class="block w-full px-3 py-2 text-left text-sm hover:bg-slate-100">${d.label}</button>`)
     .join('');
@@ -2205,8 +2213,9 @@ function pharmRow(e) {
   const primaryAction = e.status === 'waiting'
     ? `<button data-pact="call" data-id="${e.id}" class="btn-primary">Call</button>`
     : e.status === 'called'
-    ? `<button data-pact="prep" data-id="${e.id}" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white">Mark preparing</button>`
-    : `<button data-pact="seen" data-id="${e.id}" class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white">Mark served</button>`;
+    // LL1: pharmacist-friendly labels.
+    ? `<button data-pact="prep" data-id="${e.id}" class="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white" title="Patient is at the window — pulling their prescription">Pulling prescription</button>`
+    : `<button data-pact="seen" data-id="${e.id}" class="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white" title="Prescription handed to the patient — visit complete">Handed to patient</button>`;
   // Move to Records / General Clinic, available once the patient has
   // been called -- pharmacy is one of three departments now.
   const moveOptions = DEPARTMENTS.filter(d => d.stream !== 'pharmacy')

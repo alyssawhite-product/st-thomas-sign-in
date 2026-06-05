@@ -190,7 +190,7 @@ export function PharmacyQueue({ initialEntries, email, role }: Props) {
                   : `${helpRequesters.length} patients pressed Request Help — go to them now.`}
               </p>
               <p className="mt-1 text-sm text-red-100">
-                Check on the patient, then Send to doctor or Mark seen to clear this alert.
+                Check on the patient, then Send to doctor or Finish at clinic to clear this alert.
               </p>
             </div>
           </div>
@@ -333,12 +333,15 @@ export function PharmacyQueue({ initialEntries, email, role }: Props) {
                   )}
 
                   <div className="mt-3 flex flex-wrap gap-2">
-                    {/* Single-button-at-a-time progression: Call → Mark preparing → Mark served. */}
+                    {/* LL1: labels describe what the pharmacist is
+                        actually doing: Call → Pulling prescription
+                        → Handed to patient. */}
                     {isWaiting && (
                       <button
                         onClick={() => submitAction(callPatientAction, e.id)}
                         disabled={pending}
                         className="rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white hover:bg-brand-dark disabled:opacity-50"
+                        title="Call the patient to the pharmacy window"
                       >
                         Call
                       </button>
@@ -348,8 +351,9 @@ export function PharmacyQueue({ initialEntries, email, role }: Props) {
                         onClick={() => submitAction(setPreparingAction, e.id)}
                         disabled={pending}
                         className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
+                        title="Patient is at the window — pulling their prescription"
                       >
-                        Mark preparing
+                        Pulling prescription
                       </button>
                     )}
                     {isPreparing && (
@@ -357,8 +361,9 @@ export function PharmacyQueue({ initialEntries, email, role }: Props) {
                         onClick={() => submitAction(markSeenAction, e.id)}
                         disabled={pending}
                         className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
+                        title="Prescription handed to the patient — visit complete"
                       >
-                        Mark served
+                        Handed to patient
                       </button>
                     )}
                     {/* Re-enabled per May 27 stakeholder feedback: pharmacy

@@ -232,7 +232,7 @@ export function StaffQueue({ initialEntries, role, email }: Props) {
                   : `${helpRequesters.length} patients pressed Request Help — go to them now: ${helpRequesters.map((e) => e.name).join(", ")}.`}
               </p>
               <p className="mt-1 text-sm text-red-100">
-                Check on the patient, then Send to doctor or Mark seen to clear this alert.
+                Check on the patient, then Send to doctor or Finish at clinic to clear this alert.
               </p>
             </div>
           </div>
@@ -411,8 +411,9 @@ export function StaffQueue({ initialEntries, role, email }: Props) {
                         className="btn-primary"
                         disabled={pending}
                         onClick={() => submitAction(setAtRecordsAction, e.id)}
+                        title="Records desk acknowledges the patient has arrived"
                       >
-                        Mark at records
+                        Patient at records
                       </button>
                     )}
                     {e.status === "at_records" && (
@@ -421,6 +422,7 @@ export function StaffQueue({ initialEntries, role, email }: Props) {
                         className="btn-primary"
                         disabled={pending}
                         onClick={() => submitAction(setWithNurseAction, e.id)}
+                        title="Records desk hands the patient over to the nurse station"
                       >
                         Send to nurse
                       </button>
@@ -428,7 +430,9 @@ export function StaffQueue({ initialEntries, role, email }: Props) {
                     {/* FF1: after nurse, the clinician decides whether
                         the patient still needs to see the doctor or
                         whether the visit is complete. Two buttons so
-                        the choice is explicit. */}
+                        the choice is explicit. LL1: labels say
+                        "Finish at clinic" so the new "done with this
+                        department" semantic is obvious. */}
                     {e.status === "with_nurse" && (
                       <>
                         <button
@@ -436,6 +440,7 @@ export function StaffQueue({ initialEntries, role, email }: Props) {
                           className="btn-primary"
                           disabled={pending}
                           onClick={() => submitAction(setWithDoctorAction, e.id)}
+                          title="Patient still needs to see the doctor"
                         >
                           Send to doctor
                         </button>
@@ -444,9 +449,9 @@ export function StaffQueue({ initialEntries, role, email }: Props) {
                           className="rounded-lg border border-emerald-600 px-3 py-2 text-sm font-semibold text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
                           disabled={pending}
                           onClick={() => submitAction(markSeenAction, e.id)}
-                          title="Close the visit without sending to a doctor"
+                          title="Close the General Clinic visit without sending to a doctor"
                         >
-                          Mark seen — no doctor needed
+                          Finish at clinic (no doctor)
                         </button>
                       </>
                     )}
@@ -456,8 +461,9 @@ export function StaffQueue({ initialEntries, role, email }: Props) {
                         className="btn-primary"
                         disabled={pending}
                         onClick={() => submitAction(markSeenAction, e.id)}
+                        title="Close the General Clinic visit"
                       >
-                        Mark seen
+                        Finish at clinic
                       </button>
                     )}
                     {/* Patient can be transferred to pharmacy at any

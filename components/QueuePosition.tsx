@@ -273,11 +273,17 @@ export function QueuePosition({ initialEntry, initialAhead, whatHappensNext }: P
   }
 
   if (state.status === "seen") {
+    // LL2: "Seen" now means "done with THIS department" — the patient
+    // may continue to another. Copy reflects that, with the department
+    // they just finished named explicitly.
+    const finishedDept = friendlyVisitTypeLabel(state.visitType) ?? "this department";
     return (
       <>
         <section className="rounded-xl bg-brand-light p-8 text-center">
-          <h2 className="text-2xl font-bold text-brand-dark">You have been seen</h2>
-          <p className="mt-3 text-slate-700">Thank you for visiting St Thomas OPC.</p>
+          <h2 className="text-2xl font-bold text-brand-dark">You&apos;ve finished at {finishedDept}</h2>
+          <p className="mt-3 text-slate-700">
+            Thank you. If you have nothing else, you&rsquo;re free to leave.
+          </p>
         </section>
         {/* FF2: offer onward transfer to another department so a
             patient can pick up a prescription (or go to clinic if
