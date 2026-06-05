@@ -337,7 +337,7 @@ export function QueuePosition({ initialEntry, initialAhead }: Props) {
         </p>
         {state.ahead > 0 && (
           <p className="mt-1 text-sm text-slate-500">
-            Rough wait: about {wait} minute{wait === 1 ? "" : "s"}
+            Around {wait} minute{wait === 1 ? "" : "s"}
           </p>
         )}
       </section>
@@ -355,8 +355,12 @@ export function QueuePosition({ initialEntry, initialAhead }: Props) {
           Write this down. You can use it to find your place again from any phone.
         </p>
       </section>
-      <TransferForm token={initialEntry.token} currentVisitType={state.visitType} />
+      {/* HH3: Request Help comes BEFORE Move to another department so
+          the more urgent action is closer to the patient's eye, and so
+          the two big buttons aren't visually adjacent (Doreen test
+          showed misclick risk when they were stacked together). */}
       <RequestHelpButton token={initialEntry.token} alreadyRequested={helpRequested} />
+      <TransferForm token={initialEntry.token} currentVisitType={state.visitType} />
       <NewCheckInLink />
       {kioskBanner}
     </>

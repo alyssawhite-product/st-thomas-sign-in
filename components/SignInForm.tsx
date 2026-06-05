@@ -197,6 +197,31 @@ export function SignInForm({ kiosk }: Props) {
         document.title = "Error: " + document.title;
       }
       setTimeout(() => summaryRef.current?.focus(), 0);
+      // HH1: also bring the first failing field into the viewport. The
+      // summary lives at the top of the form; on a long form the field
+      // itself can be far below the fold, so users only see the summary
+      // and have to click the link to find the actual input. This
+      // pre-scrolls so they see both.
+      const orderedKeys: FieldKey[] = [
+        "name",
+        "nationality",
+        "country_of_origin",
+        "id_number",
+        "visit_type",
+        "consultation_type",
+        "has_prescription",
+        "other_reason",
+      ];
+      const firstField = orderedKeys.find((k) => fieldErrors[k]);
+      if (firstField) {
+        // Wait one tick for the summary focus + re-render to settle,
+        // then bring the field into view without stealing focus from
+        // the summary (focus stays for screen readers).
+        setTimeout(() => {
+          const el = document.getElementById(FIELD_META[firstField].anchor);
+          el?.scrollIntoView({ block: "center", behavior: "smooth" });
+        }, 50);
+      }
       return;
     }
     // Clear the error prefix once validation passes.
@@ -553,100 +578,104 @@ export function SignInForm({ kiosk }: Props) {
         <legend className="field-label">Type of visit</legend>
         <div className="mt-3 space-y-2">
           {TOP_LEVEL_VISITS.map((v) => (
-            <label
-              key={v.value}
-              className="flex cursor-pointer items-start gap-3 rounded-md border border-slate-300 px-4 py-3 text-base has-[:checked]:border-brand has-[:checked]:bg-brand-light"
-            >
-              <input
-                id={`visit_type_${v.value}`}
-                type="radio"
-                name="visit_type"
-                value={v.value}
-                checked={topLevelVisit === v.value}
-                onChange={() => {
-                  setTopLevelVisit(v.value);
-                  // Reset the sub-choice when changing top-level branches.
-                  if (v.value !== "general_clinic") setConsultationType("");
-                  clearError("visit_type");
-                  clearError("consultation_type");
-                }}
-                className="mt-0.5 h-5 w-5 shrink-0 accent-brand"
-              />
-              <span className="flex flex-col">
-                <span className="font-medium">{v.label}</span>
-                <span className="text-sm text-slate-500">{v.description}</span>
-              </span>
-            </label>
+            <div key={v.value}>
+              <label className="flex cursor-pointer items-start gap-3 rounded-md border border-slate-300 px-4 py-3 text-base has-[:checked]:border-brand has-[:checked]:bg-brand-light">
+                <input
+                  id={`visit_type_${v.value}`}
+                  type="radio"
+                  name="visit_type"
+                  value={v.value}
+                  checked={topLevelVisit === v.value}
+                  onChange={() => {
+                    setTopLevelVisit(v.value);
+                    // Reset the sub-choice when changing top-level branches.
+                    if (v.value !== "general_clinic") setConsultationType("");
+                    clearError("visit_type");
+                    clearError("consultation_type");
+                  }}
+                  className="mt-0.5 h-5 w-5 shrink-0 accent-brand"
+                />
+                <span className="flex flex-col">
+                  <span className="font-medium">{v.label}</span>
+                  <span className="text-sm text-slate-500">{v.description}</span>
+                </span>
+              </label>
+
+              {/* HH2: General Clinic sub-question rendered inline under
+                  the radio so the user notices it. Indented + accent
+                  border so it visually attaches to the parent option. */}
+              {v.value === "general_clinic" && topLevelVisit === "general_clinic" && (
+                <fieldset className="mt-2 ml-4 border-l-4 border-brand pl-4">
+                  <legend className="text-sm font-semibold text-slate-700">
+                    Is this a new consultation or a follow-up?
+                  </legend>
+                  <div className="mt-2 space-y-2">
+                    {CONSULTATION_TYPES.map((opt) => (
+                      <label
+                        key={opt.value}
+                        className="flex cursor-pointer items-start gap-3 rounded-md border border-slate-300 px-4 py-3 text-base has-[:checked]:border-brand has-[:checked]:bg-brand-light"
+                      >
+                        <input
+                          id={`consultation_type_${opt.value}`}
+                          type="radio"
+                          name="consultation_type"
+                          value={opt.value}
+                          checked={consultationType === opt.value}
+                          onChange={() => {
+                            setConsultationType(opt.value);
+                            clearError("consultation_type");
+                          }}
+                          className="mt-0.5 h-5 w-5 shrink-0 accent-brand"
+                        />
+                        <span className="flex flex-col">
+                          <span className="font-medium">{opt.label}</span>
+                          <span className="text-sm text-slate-500">{opt.description}</span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                  {errors.consultation_type && (
+                    <p className="mt-2 text-sm font-medium text-red-700">{errors.consultation_type}</p>
+                  )}
+                </fieldset>
+              )}
+
+              {/* HH2: Other free-text reason rendered inline under the
+                  Other radio, same visual treatment. EE5 capture. */}
+              {v.value === "other" && topLevelVisit === "other" && (
+                <div className="mt-2 ml-4 border-l-4 border-brand pl-4">
+                  <label htmlFor="other_reason" className="text-sm font-semibold text-slate-700">
+                    What brings you in today?
+                  </label>
+                  <p className="mb-2 text-sm text-slate-500">
+                    A short note so the clinician knows what to expect.
+                  </p>
+                  <textarea
+                    id="other_reason"
+                    name="other_reason"
+                    rows={3}
+                    maxLength={200}
+                    placeholder="e.g. Vaccination certificate, ear infection follow-up, lab test pickup"
+                    className={`field-input ${errors.other_reason ? "border-red-500" : ""}`}
+                    value={otherReason}
+                    onChange={(e) => {
+                      setOtherReason(e.target.value);
+                      clearError("other_reason");
+                    }}
+                    aria-invalid={!!errors.other_reason}
+                  />
+                  {errors.other_reason && (
+                    <p className="mt-1 text-sm font-medium text-red-700">{errors.other_reason}</p>
+                  )}
+                </div>
+              )}
+            </div>
           ))}
         </div>
         {errors.visit_type && (
           <p className="mt-2 text-sm font-medium text-red-700">{errors.visit_type}</p>
         )}
       </fieldset>
-
-      {/* EE5: capture a free-text reason for "Other" so the clinician
-          sees what the patient came in for instead of just "other". */}
-      {topLevelVisit === "other" && (
-        <div>
-          <label htmlFor="other_reason" className="field-label">
-            What brings you in today?
-          </label>
-          <p className="mb-2 text-sm text-slate-500">
-            A short note so the clinician knows what to expect.
-          </p>
-          <textarea
-            id="other_reason"
-            name="other_reason"
-            rows={3}
-            maxLength={200}
-            placeholder="e.g. Vaccination certificate, ear infection follow-up, lab test pickup"
-            className={`field-input ${errors.other_reason ? "border-red-500" : ""}`}
-            value={otherReason}
-            onChange={(e) => {
-              setOtherReason(e.target.value);
-              clearError("other_reason");
-            }}
-            aria-invalid={!!errors.other_reason}
-          />
-          {errors.other_reason && (
-            <p className="mt-1 text-sm font-medium text-red-700">{errors.other_reason}</p>
-          )}
-        </div>
-      )}
-
-      {topLevelVisit === "general_clinic" && (
-        <fieldset>
-          <legend className="field-label">Is this a new consultation or a follow-up?</legend>
-          <div className="mt-3 space-y-2">
-            {CONSULTATION_TYPES.map((opt) => (
-              <label
-                key={opt.value}
-                className="flex cursor-pointer items-start gap-3 rounded-md border border-slate-300 px-4 py-3 text-base has-[:checked]:border-brand has-[:checked]:bg-brand-light"
-              >
-                <input
-                  id={`consultation_type_${opt.value}`}
-                  type="radio"
-                  name="consultation_type"
-                  value={opt.value}
-                  checked={consultationType === opt.value}
-                  onChange={() => {
-                    setConsultationType(opt.value);
-                    clearError("consultation_type");
-                  }}
-                  className="mt-0.5 h-5 w-5 shrink-0 accent-brand"
-                />
-                <span className="flex flex-col">
-                  <span className="font-medium">{opt.label}</span>
-                  <span className="text-sm text-slate-500">{opt.description}</span>
-                </span>
-              </label>
-            ))}
-          </div>
-          {errors.consultation_type && (
-            <p className="mt-2 text-sm font-medium text-red-700">{errors.consultation_type}</p>
-          )}
-        </fieldset>
-      )}
 
       {topLevelVisit === "pharmacy" && (
         <fieldset>

@@ -174,6 +174,22 @@
       <span class="font-semibold text-slate-700">Visit type:</span> <span id="q-visit-type">—</span>
     </p>
 
+    <!-- HH3: Request Help comes BEFORE the Move-to-another-department
+         block so the urgent action is closer to the patient's eye and
+         the two big buttons aren't visually adjacent (Doreen-test
+         showed misclick risk when they were stacked together). -->
+    <div id="q-help-box" class="mt-6 hidden">
+      <div id="q-help-prompt" class="rounded-xl border-2 border-red-200 bg-white p-5 text-center">
+        <p class="text-sm font-semibold text-slate-700">Feeling worse while you wait?</p>
+        <p class="mt-1 text-sm text-slate-500">Press the button below and a nurse will be alerted right away.</p>
+        <button type="button" id="q-help-btn" class="mt-4 w-full rounded-xl bg-red-600 px-6 py-4 text-lg font-bold uppercase tracking-wider text-white shadow-lg hover:bg-red-700">🆘 Request help</button>
+      </div>
+      <div id="q-help-confirm" class="hidden rounded-xl border-2 border-red-300 bg-red-50 p-5 text-center">
+        <p class="text-sm font-semibold uppercase tracking-wide text-red-700">Help requested</p>
+        <p class="mt-1 text-red-900">Staff have been alerted. A nurse will come to you as soon as possible.</p>
+      </div>
+    </div>
+
     <div id="q-transfer-box" class="mt-6 rounded-xl border border-slate-200 p-5 hidden">
       <!-- FF2: heading + subhead are swapped at render time depending
            on whether the patient is mid-visit or has been marked seen. -->
@@ -188,21 +204,6 @@
           <button type="button" data-rx="no" class="rx-pick rounded-md bg-brand px-3 py-1.5 text-sm font-semibold text-white">No prescription</button>
           <button type="button" id="rx-cancel" class="rounded-md bg-slate-200 px-3 py-1.5 text-sm font-semibold text-slate-700">Cancel</button>
         </div>
-      </div>
-    </div>
-
-    <!-- X-batch: patient-facing emergency button. If the patient's
-         condition is degrading while they wait, this alerts clinic
-         staff right away. Hidden after status=seen. -->
-    <div id="q-help-box" class="mt-6 hidden">
-      <div id="q-help-prompt" class="rounded-xl border-2 border-red-200 bg-white p-5 text-center">
-        <p class="text-sm font-semibold text-slate-700">Feeling worse while you wait?</p>
-        <p class="mt-1 text-sm text-slate-500">Press the button below and a nurse will be alerted right away.</p>
-        <button type="button" id="q-help-btn" class="mt-4 w-full rounded-xl bg-red-600 px-6 py-4 text-lg font-bold uppercase tracking-wider text-white shadow-lg hover:bg-red-700">🆘 Request help</button>
-      </div>
-      <div id="q-help-confirm" class="hidden rounded-xl border-2 border-red-300 bg-red-50 p-5 text-center">
-        <p class="text-sm font-semibold uppercase tracking-wide text-red-700">Help requested</p>
-        <p class="mt-1 text-red-900">Staff have been alerted. A nurse will come to you as soon as possible.</p>
       </div>
     </div>
 
@@ -925,15 +926,44 @@ document.querySelectorAll('.nav-btn').forEach(b => {
 // ============================================================
 function renderSigninForm() {
   const wrap = document.getElementById('si-visit-types');
+  // HH2: each radio gets its own container with a placeholder slot for
+  // the related sub-question. We then physically move the existing
+  // sub-fieldsets (consultation, prescription, other-reason) into
+  // those slots so they render inline under the selected option.
   wrap.innerHTML = TOP_LEVEL_VISITS.map((v, i) => `
-    <label class="flex cursor-pointer items-start gap-3 rounded-md border border-slate-300 px-4 py-3 text-base has-[:checked]:border-brand has-[:checked]:bg-brand-light">
-      <input ${i === 0 ? 'id="visit-type-general_clinic"' : ''} type="radio" name="si-visit-type" value="${v.value}" class="mt-0.5 h-5 w-5 shrink-0 accent-emerald-700" />
-      <span class="flex flex-col">
-        <span class="font-medium">${v.label}</span>
-        <span class="text-sm text-slate-500">${v.description}</span>
-      </span>
-    </label>
+    <div data-visit-type-container="${v.value}">
+      <label class="flex cursor-pointer items-start gap-3 rounded-md border border-slate-300 px-4 py-3 text-base has-[:checked]:border-brand has-[:checked]:bg-brand-light">
+        <input ${i === 0 ? 'id="visit-type-general_clinic"' : ''} type="radio" name="si-visit-type" value="${v.value}" class="mt-0.5 h-5 w-5 shrink-0 accent-emerald-700" />
+        <span class="flex flex-col">
+          <span class="font-medium">${v.label}</span>
+          <span class="text-sm text-slate-500">${v.description}</span>
+        </span>
+      </label>
+      <div data-visit-type-sub="${v.value}"></div>
+    </div>
   `).join('');
+  // Move sub-fieldsets into their respective slots, once. Use existing
+  // DOM nodes so the show/hide JS keeps working.
+  (function moveSubFieldsets() {
+    const consFs = document.getElementById('si-consultation-fs');
+    const consSlot = wrap.querySelector('[data-visit-type-sub="general_clinic"]');
+    if (consFs && consSlot && consFs.parentElement !== consSlot) {
+      consFs.classList.add('mt-2', 'ml-4', 'border-l-4', 'border-brand', 'pl-4');
+      consSlot.appendChild(consFs);
+    }
+    const rxFs = document.getElementById('si-prescription-fs');
+    const rxSlot = wrap.querySelector('[data-visit-type-sub="pharmacy"]');
+    if (rxFs && rxSlot && rxFs.parentElement !== rxSlot) {
+      rxFs.classList.add('mt-2', 'ml-4', 'border-l-4', 'border-brand', 'pl-4');
+      rxSlot.appendChild(rxFs);
+    }
+    const otherRow = document.getElementById('si-other-reason-row');
+    const otherSlot = wrap.querySelector('[data-visit-type-sub="other"]');
+    if (otherRow && otherSlot && otherRow.parentElement !== otherSlot) {
+      otherRow.classList.add('mt-2', 'ml-4', 'border-l-4', 'border-brand', 'pl-4');
+      otherSlot.appendChild(otherRow);
+    }
+  })();
   wrap.querySelectorAll('input').forEach(r => {
     r.addEventListener('change', () => {
       updatePrescriptionVisibility();
@@ -1228,6 +1258,16 @@ document.getElementById('signin-form').addEventListener('submit', (e) => {
   if (hasError) {
     siRefreshSummary();
     setTimeout(() => document.getElementById('si-summary').focus(), 0);
+    // HH1: also bring the first failing field into view so the user
+    // sees both the summary AND the actual input that needs fixing.
+    setTimeout(() => {
+      const firstErr = document.querySelector('#si-summary-list [data-si-jump]');
+      if (!firstErr) return;
+      const fieldKey = firstErr.dataset.siJump;
+      const inputId = SI_FIELD_META[fieldKey]?.input;
+      const el = inputId && document.getElementById(inputId);
+      if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }, 50);
     return;
   }
 
@@ -1441,7 +1481,7 @@ function renderQueue() {
         <p class="text-sm font-semibold uppercase tracking-wide text-brand">Your ticket</p>
         <p class="mt-1 text-7xl font-black text-brand-dark">#${entry.ticket_number ?? '—'}</p>
         <p class="mt-5 text-slate-700">${ahead === 0 ? "You're next in line." : `You're position <strong>${position}</strong> — ${ahead} ${ahead === 1 ? 'person' : 'people'} ahead of you.`}</p>
-        ${ahead > 0 ? `<p class="mt-1 text-sm text-slate-500">Rough wait: about ${wait} minute${wait === 1 ? '' : 's'}</p>` : ''}
+        ${ahead > 0 ? `<p class="mt-1 text-sm text-slate-500">Around ${wait} minute${wait === 1 ? '' : 's'}</p>` : ''}
       </section>`;
   }
   void ticketLine;  // reserved for future use; intentionally unused right now
