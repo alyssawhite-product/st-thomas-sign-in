@@ -458,9 +458,19 @@ function RequestHelpButton({
     fd.set("token", token);
     startTransition(async () => {
       try {
-        await requestHelpAction(fd);
-        setRequested(true);
-      } catch {
+        // requestHelpAction now returns a structured result instead
+        // of throwing. Treat ok=true as success; otherwise show the
+        // friendly retry message (with the server-side message logged
+        // to the browser console for debugging).
+        const result = await requestHelpAction(fd);
+        if (result?.ok) {
+          setRequested(true);
+        } else {
+          console.error("[RequestHelp] server returned error:", result?.error);
+          setError("Could not send. Please try again, or ask the staff in person.");
+        }
+      } catch (err) {
+        console.error("[RequestHelp] threw:", err);
         setError("Could not send. Please try again, or ask the staff in person.");
       }
     });

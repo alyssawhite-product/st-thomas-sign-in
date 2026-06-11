@@ -220,14 +220,43 @@ export async function setUrgentAction(formData: FormData): Promise<void> {
 // Patient self-service: presses Request Help on their phone. Token in
 // hand is the only auth needed. Fast-tracks to with_nurse so a nurse
 // is dispatched immediately (see lib/queue.ts requestHelp).
-export async function requestHelpAction(formData: FormData): Promise<void> {
-  const token = String(formData.get("token") ?? "").trim();
-  if (!token) throw new Error("Missing token");
-  await requestHelp(token);
-  revalidatePath("/staff");
-  revalidatePath("/pharmacy");
-  revalidatePath("/display");
-  revalidatePath(`/queue/${token}`);
+//
+// Returns a structured result instead of throwing so a downstream
+// revalidatePath quirk on the production build (Next.js wraps
+// re-render failures in a generic "Server Components render" error
+// that bypasses the client's try/catch). Even on partial failure
+// (data saved, revalidate threw) we tell the client it worked so
+// the friendly "Help requested" state shows.
+export async function requestHelpAction(
+  formData: FormData,
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const token = String(formData.get("token") ?? "").trim();
+    if (!token) return { ok: false, error: "Missing token" };
+
+    await requestHelp(token);
+
+    // Revalidate AFTER the data write. If revalidate throws (rare,
+    // but Next.js can blow up here on Netlify static export and on
+    // path-not-yet-cached cases), the data is already saved — log
+    // and ignore so the patient still sees the success state.
+    try {
+      revalidatePath("/staff");
+      revalidatePath("/pharmacy");
+      revalidatePath("/display");
+      revalidatePath(`/queue/${token}`);
+    } catch (revErr) {
+      console.error("[requestHelpAction] revalidate failed (data was saved):", revErr);
+    }
+
+    return { ok: true };
+  } catch (err) {
+    console.error("[requestHelpAction] failed:", err);
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : "Unknown error",
+    };
+  }
 }
 
 export async function savePharmacyNoteAction(formData: FormData): Promise<void> {
